@@ -1,0 +1,176 @@
+{
+  "name": "file-sql",
+  "displayName": "File SQL",
+  "description": "Query local and S3 files (CSV, JSON, Parquet) with SQL using DuckDB",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Data Science",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "fileSql.addPath",
+        "title": "File SQL: Add Path (Local or S3)",
+        "icon": "$(add)"
+      },
+      {
+        "command": "fileSql.addFolder",
+        "title": "File SQL: Add Folder",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "fileSql.openQueryEditor",
+        "title": "File SQL: Open Query Editor",
+        "icon": "$(play)"
+      },
+      {
+        "command": "fileSql.clearTables",
+        "title": "File SQL: Clear All Tables",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "fileSql.removeTable",
+        "title": "Remove Table",
+        "icon": "$(x)"
+      },
+      {
+        "command": "fileSql.renameTable",
+        "title": "Rename Table",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "fileSql.copyTableName",
+        "title": "Copy Table Name"
+      },
+      {
+        "command": "fileSql.copyColumnName",
+        "title": "Copy Column Name"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "fileSqlExplorer",
+          "title": "File SQL",
+          "icon": "media/database.svg"
+        }
+      ]
+    },
+    "views": {
+      "fileSqlExplorer": [
+        {
+          "id": "fileSqlTables",
+          "name": "Tables",
+          "icon": "media/database.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "fileSql.addPath",
+          "when": "view == fileSqlTables",
+          "group": "navigation"
+        },
+        {
+          "command": "fileSql.addFolder",
+          "when": "view == fileSqlTables",
+          "group": "navigation"
+        },
+        {
+          "command": "fileSql.openQueryEditor",
+          "when": "view == fileSqlTables",
+          "group": "navigation"
+        },
+        {
+          "command": "fileSql.clearTables",
+          "when": "view == fileSqlTables",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "fileSql.removeTable",
+          "when": "view == fileSqlTables && viewItem == table",
+          "group": "inline"
+        },
+        {
+          "command": "fileSql.copyTableName",
+          "when": "view == fileSqlTables && viewItem == table",
+          "group": "0_copy@1"
+        },
+        {
+          "command": "fileSql.renameTable",
+          "when": "view == fileSqlTables && viewItem == table",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "fileSql.removeTable",
+          "when": "view == fileSqlTables && viewItem == table",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "fileSql.copyColumnName",
+          "when": "view == fileSqlTables && viewItem == column",
+          "group": "0_copy@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "File SQL",
+      "properties": {
+        "fileSql.awsProfile": {
+          "type": "string",
+          "default": "default",
+          "description": "AWS credentials profile name for S3 access"
+        },
+        "fileSql.awsRegion": {
+          "type": "string",
+          "default": "us-east-1",
+          "description": "AWS region for S3 access"
+        },
+        "fileSql.maxResultRows": {
+          "type": "number",
+          "default": 1000,
+          "description": "Maximum number of rows returned per query"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "compile": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --ext ts,tsx"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/credential-providers": "^3.500.0",
+    "@codemirror/autocomplete": "^6.12.0",
+    "@codemirror/commands": "^6.3.0",
+    "@codemirror/lang-sql": "^6.6.0",
+    "@codemirror/state": "^6.4.0",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "@codemirror/view": "^6.23.0",
+    "duckdb": "^1.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

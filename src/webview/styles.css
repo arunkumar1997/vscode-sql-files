@@ -1,0 +1,364 @@
+:root {
+  --font-family: var(--vscode-font-family, sans-serif);
+  --font-size: var(--vscode-font-size, 13px);
+  --mono-font: var(--vscode-editor-font-family, 'Menlo', 'Consolas', 'Courier New', monospace);
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --fg: var(--vscode-editor-foreground, #d4d4d4);
+  --border: var(--vscode-panel-border, #333);
+  --btn-bg: var(--vscode-button-background, #0e639c);
+  --btn-fg: var(--vscode-button-foreground, #fff);
+  --btn-hover: var(--vscode-button-hoverBackground, #1177bb);
+  --input-bg: var(--vscode-input-background, #3c3c3c);
+  --table-header-bg: var(--vscode-editor-lineHighlightBackground, #2a2d2e);
+  --table-row-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+  --error-fg: var(--vscode-editorError-foreground, #f48771);
+  --warn-fg: var(--vscode-editorWarning-foreground, #cca700);
+  --tab-bar-bg: var(--vscode-editorGroupHeader-tabsBackground, #1e1e1e);
+  --tab-inactive-bg: var(--vscode-tab-inactiveBackground, #2d2d2d);
+  --tab-active-bg: var(--vscode-tab-activeBackground, #1e1e1e);
+  --tab-inactive-fg: var(--vscode-tab-inactiveForeground, #8a8a8a);
+  --tab-active-fg: var(--vscode-tab-activeForeground, #ffffff);
+  --tab-border: var(--vscode-tab-border, #252526);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.toolbar button {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: none;
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-size: var(--font-size);
+}
+
+.toolbar button:hover { background: var(--btn-hover); }
+.toolbar button:disabled { opacity: 0.5; cursor: default; }
+
+.toolbar-hint {
+  font-size: 11px;
+  opacity: 0.45;
+  margin-left: 4px;
+}
+
+.toolbar .row-count {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.toolbar .truncated {
+  color: var(--warn-fg);
+  font-size: 11px;
+}
+
+/* Editor area */
+.editor-wrapper {
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #282c34;
+}
+
+.editor-container {
+  height: 100%;
+}
+
+/* ── Tab bar ── */
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  background: var(--tab-bar-bg);
+  border-bottom: 1px solid var(--tab-border);
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+  min-height: 35px;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 12px;
+  height: 35px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--tab-inactive-fg);
+  background: var(--tab-inactive-bg);
+  border-right: 1px solid var(--tab-border);
+  white-space: nowrap;
+  min-width: 100px;
+  max-width: 180px;
+  position: relative;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  color: var(--tab-active-fg);
+  background: var(--vscode-tab-hoverBackground, #2a2d2e);
+}
+
+.tab--active {
+  color: var(--tab-active-fg);
+  background: var(--tab-active-bg);
+  border-bottom: 2px solid var(--btn-bg);
+}
+
+.tab--running::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--btn-bg);
+  margin-right: 4px;
+  flex-shrink: 0;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.tab-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.tab-rename-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  color: var(--fg);
+  border: 1px solid var(--btn-bg);
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-size: 12px;
+  font-family: var(--font-family);
+  outline: none;
+  height: 22px;
+}
+
+.tab-close {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.tab:hover .tab-close,
+.tab--active .tab-close { opacity: 0.6; }
+.tab-close:hover { opacity: 1 !important; background: var(--vscode-toolbar-hoverBackground, #3a3d41); }
+
+.tab-add {
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 12px;
+  cursor: pointer;
+  opacity: 0.45;
+  flex-shrink: 0;
+  align-self: center;
+}
+.tab-add:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, #3a3d41); }
+
+/* ── CodeMirror completion type colours ── */
+/* Keywords → blue-ish (like editor keywords) */
+.cm-completionIcon-keyword::after { color: #569cd6 !important; }
+/* Tables (class) → green */
+.cm-completionIcon-class::after { color: #4ec9b0 !important; }
+/* Columns (property) → light yellow */
+.cm-completionIcon-property::after { color: #dcdcaa !important; }
+
+/* Section headers in the completion list */
+.cm-completionSection {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 4px 8px 2px;
+  opacity: 0.55;
+  border-top: 1px solid var(--border);
+}
+
+/* Resize handle */
+.resize-handle {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--vscode-focusBorder, #007fd4);
+}
+
+.resize-handle-bar {
+  width: 40px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border);
+}
+
+.resize-handle:hover .resize-handle-bar,
+.resize-handle:active .resize-handle-bar {
+  background: var(--btn-fg);
+}
+
+/* Results panel */
+.results-panel {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.results-wrapper {
+  height: 100%;
+  overflow: auto;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono-font);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.results-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--vscode-editor-background, #1e1e1e);
+  text-align: left;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: default;
+}
+
+.results-table th.copyable:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.results-table td {
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.results-table tr:hover td { background: var(--table-row-hover); }
+
+/* Row number column */
+.results-table .row-num {
+  color: var(--vscode-descriptionForeground, #888);
+  text-align: right;
+  padding-right: 8px;
+  width: 1%;
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+
+/* Copy toast */
+.copy-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 1000;
+  animation: fadeout 1.5s ease-in-out forwards;
+}
+
+@keyframes fadeout {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.error-banner {
+  padding: 10px 12px;
+  color: var(--error-fg);
+  background: color-mix(in srgb, var(--error-fg) 10%, var(--bg));
+  border-left: 3px solid var(--error-fg);
+  margin: 8px;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  opacity: 0.5;
+  font-size: 13px;
+}

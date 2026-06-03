@@ -1,0 +1,8 @@
+
+.vscode/
+esbuild.mjs
+tsconfig*.json
+PLAN.md
+*.map
+**/*.ts
+**/*.tsx
