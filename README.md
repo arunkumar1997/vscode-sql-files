@@ -1,169 +1,121 @@
-# File SQL - Query Local & S3 Files with SQL in VS Code
+# File SQL — Query Local & S3 Files with SQL in VS Code
 
-[![VS Code Extension](https://img.shields.io/badge/Visual%20Studio%20Code-Extension-blue?logo=visualstudiocode)](https://marketplace.visualstudio.com)
-[![DuckDB Powered](https://img.shields.io/badge/Powered%20by-DuckDB-336B5C?logo=duckdb)](https://duckdb.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-85.8%25-3178C6?logo=typescript)](https://www.typescriptlang.org)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-007ACC?logo=visualstudiocode&logoColor=white)](https://marketplace.visualstudio.com)
+[![Powered by DuckDB](https://img.shields.io/badge/Powered%20by-DuckDB-FFF000?logo=duckdb&logoColor=black)](https://duckdb.org)
+[![TypeScript](https://img.shields.io/badge/Built%20with-TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 
-## Overview
+**File SQL** turns your local and Amazon S3 files into queryable SQL tables — right inside VS Code. Load CSV, JSON, Parquet, or plain-text files, and run SQL queries against them instantly using [DuckDB](https://duckdb.org)'s high-performance analytics engine. No databases, no ETL pipelines, no setup.
 
-**File SQL** is a powerful VS Code extension that transforms your local and cloud files into queryable databases. Import CSV, JSON, and Parquet files from your local filesystem or Amazon S3 buckets, then execute SQL queries using DuckDB's high-performance analytics engine—without ETL pipelines, data warehouses, or complex setup.
+---
 
-Powered by [DuckDB](https://duckdb.org), a high-performance SQL analytics engine, File SQL brings the convenience of SQL to your file-based data analysis workflow.
+## ✨ Features
 
-## 🚀 Key Features
+### 📂 Load Any Data Source
 
-### File & Folder Support
-- **Load Local Files**: Import CSV, JSON, and Parquet files from your local filesystem
-- **Import from Amazon S3**: Download and import files from S3 buckets using `s3://bucket/path` syntax
-- **Folder Import**: Batch load entire folders and subfolders for bulk data processing
-- **Multiple Data Sources**: Mix and match local and imported S3 files in a single query
+| Source | How |
+|---|---|
+| **Local file** | Enter a file path — CSV, JSON, Parquet, or text |
+| **Local folder** | Pick a folder and register every supported file as a table |
+| **S3 single file** | Enter `s3://bucket/path/to/file.csv` |
+| **S3 partitioned folder** | Enter `s3://bucket/path/to/folder/` — all part-files are registered as **one table** |
 
-### SQL Query Editor
-- **Intelligent SQL Editor**: CodeMirror-powered editor with syntax highlighting and autocomplete
-- **Multi-Tab Support**: Open and manage multiple queries simultaneously
-- **Resizable Query Editor**: Adjust editor height for better UX with your preferred layout
-- **Tabbed Query Management**: Name, organize, and switch between queries effortlessly
-- **Select & Execute**: Run only selected SQL statements (perfect for testing snippets)
+### 🔍 SQL Query Editor
 
-### Schema Exploration & Data Discovery
-- **View Table Schema**: Inspect column names, data types, and structure instantly
-- **Copy Column Names**: Click to copy column names—no more manual typing
-- **Copy Table Names**: Quickly reference table names in your queries
-- **Interactive Table Explorer**: Tree-view visualization of all loaded tables and columns
-- **Rename Tables**: Alias imported tables with custom names for cleaner, readable queries
+- **CodeMirror 6** editor with SQL syntax highlighting and the **One Dark** theme
+- **Autocomplete** for table names, column names, and SQL keywords
+- **Run full query** — click ▶ Run or press `Ctrl+Enter`
+- **Run selected text** — highlight a portion of SQL and press `Ctrl+Enter` to execute only that snippet
+- **Multi-tab queries** — open multiple query tabs, rename them by double-clicking, and switch between them
 
-### Query Results
-- **Interactive Result Grid**: Browse query results in a searchable, sortable table format
-- **Result Limiting**: Configurable row limits to control memory usage (default: 1,000 rows)
-- **Export-Ready Data**: Copy results for use in other tools and applications
+### 📊 Results Grid
 
-### AWS S3 Connectivity
-- **Secure Import**: Import files from S3 using AWS credential profile support
-- **S3 Path Support**: Use `s3://bucket/file.csv` or `s3://bucket/folder/` patterns
-- **Profile Management**: Switch between AWS profiles in extension settings
-- **Region Configuration**: Set AWS region for S3 access
+- Tabular results displayed directly below the editor
+- Row count shown in the toolbar
+- Truncation warning when results exceed the configured `maxResultRows` limit
+- **Alt+Click** any header or cell to copy its value to the clipboard
 
-## 📦 Installation
+### 🗂️ Sidebar Explorer
 
-1. Open **Visual Studio Code**
-2. Navigate to the **Extensions** marketplace (Ctrl+Shift+X / Cmd+Shift+X)
-3. Search for **"File SQL"** or **"file-sql"**
-4. Click **Install**
-5. Reload VS Code when prompted
+- Tree view listing all loaded tables with expandable column details (name + type)
+- **Right-click** a table to **Rename**, **Remove**, **Copy Table Name**
+- **Right-click** a column to **Copy Column Name**
+- S3-sourced tables show the original `s3://` URI as a tooltip
 
-### System Requirements
-- VS Code 1.85.0 or later
-- Node.js 16+ (for development)
-- AWS credentials configured (optional, for S3 file import)
+### 📐 Resizable Editor
 
-## 🎯 Quick Start
+- Drag the horizontal divider between the editor and results panel to resize
+- Minimum height of 80 px, maximum stretches to fill the window
 
-### Step 1: Add a Data Source
+### ☁️ S3 Integration
 
-Three ways to load data:
+- **Download-first architecture** — files are streamed from S3 to a local temp directory, then read by DuckDB (avoids httpfs redirect/auth issues)
+- **Auto region detection** — bucket region is resolved via `GetBucketLocation`; the `fileSql.awsRegion` setting is only a fallback
+- **AWS profile support** — reads credentials from `~/.aws/credentials` using the profile set in `fileSql.awsProfile`
+- **Partitioned datasets** — an S3 folder containing `part-*.parquet` files is registered as a single table with a DuckDB glob read
+- Temp files are cleaned up automatically when the extension deactivates
 
-#### Option A: Add a Single Local File
-1. Click the **+** icon in the File SQL sidebar
-2. Select a local file path: `/path/to/data.csv` or `/path/to/data.parquet`
-3. The file is imported and loaded as a table
+---
 
-#### Option B: Add a Local Folder
-1. Click the **folder** icon in the File SQL sidebar
-2. Select a local folder
-3. All CSV, JSON, and Parquet files in the folder are imported as individual tables
+## 📦 Supported File Formats
 
-#### Option C: Import from S3
-1. Click the **+** icon and enter an S3 path:
-   - Single file: `s3://my-bucket/data/file.csv`
-   - Entire folder: `s3://my-bucket/data-folder/`
-2. The file(s) are downloaded and imported into your local tables
-3. Queries execute locally on the imported data
+| Extension | Detected As | DuckDB Expression |
+|---|---|---|
+| `.csv`, `.tsv` | CSV | `read_csv('path', AUTO_DETECT=TRUE)` |
+| `.json`, `.jsonl`, `.ndjson` | JSON | `read_json_auto('path')` |
+| `.parquet` | Parquet | `read_parquet('path')` or `read_parquet('dir/*.parquet')` for folders |
+| `.txt`, `.log` | Text | `read_csv('path', DELIM='\n', COLUMNS={'line':'VARCHAR'})` |
 
-### Step 2: Explore Your Data
+---
 
-1. In the **File SQL Explorer** panel, expand the **Tables** section
-2. View loaded tables and their columns
-3. Right-click on any table to:
-   - **Rename**: Give tables meaningful names (e.g., `customers_2024`)
-   - **Copy Table Name**: Auto-copy to clipboard for use in queries
-   - **Copy Column Name**: Right-click columns to copy names
-   - **Remove**: Unload a table from memory
+## 🚀 Quick Start
 
-### Step 3: Write & Execute Queries
+### 1. Install
 
-1. Click the **play** icon (or press Cmd+Enter / Ctrl+Enter) to open the Query Editor
-2. Write SQL queries:
-   ```sql
-   SELECT name, email, COUNT(*) as purchase_count
-   FROM customers
-   GROUP BY name, email
-   ORDER BY purchase_count DESC;
-   ```
-3. **Execute full query**: Click the play button or press Cmd+Enter
-4. **Execute selected text**: Highlight specific SQL statements and press Cmd+Enter
-5. Results appear in a table below the editor
+1. Open **VS Code** → **Extensions** (`Ctrl+Shift+X` / `Cmd+Shift+X`)
+2. Search for **"File SQL"**
+3. Click **Install**
 
-### Step 4: Manage Multiple Queries
+**Requirements:** VS Code 1.85.0+
 
-1. Use the **+** button in the query editor to create new tabs
-2. Rename tabs by double-clicking the tab name
-3. Close tabs with the **×** button
-4. Switch between queries instantly
+### 2. Load Data
 
-## 📋 SQL Query Examples
+Open the **File SQL** sidebar (database icon in the Activity Bar), then:
 
-### Query Local CSV Files
+- Click the **＋** icon → enter a local path (`/data/sales.csv`) or S3 URI (`s3://bucket/data.parquet`)
+- Click the **📁** icon → pick a local folder to import all supported files
+
+### 3. Query
+
+- Click the **▶** icon in the sidebar (or run **File SQL: Open Query Editor** from the Command Palette)
+- Write SQL and press **Ctrl+Enter**:
+
 ```sql
-SELECT * FROM employees 
-WHERE salary > 50000
-ORDER BY salary DESC;
+SELECT region, SUM(revenue) AS total_revenue
+FROM sales
+WHERE year >= 2024
+GROUP BY region
+ORDER BY total_revenue DESC;
 ```
 
-### Join Local and Imported S3 Data
-```sql
-SELECT 
-  l.order_id,
-  l.customer_name,
-  s.product_details
-FROM local_orders l
-LEFT JOIN imported_s3_catalog s ON l.product_id = s.id;
-```
+### 4. Explore Results
 
-### Aggregate Data Imported from S3 Parquet
-```sql
-SELECT 
-  region,
-  AVG(revenue) as avg_revenue,
-  COUNT(*) as transactions
-FROM imported_s3_sales_data
-WHERE year = 2024
-GROUP BY region;
-```
+- Results appear in a table below the editor
+- Open additional tabs with the **＋** button in the tab bar
+- Rename tabs by double-clicking their label
 
-### Union Data from Multiple Sources
-```sql
-SELECT date, amount, 'Local' as source
-FROM local_transactions
-UNION ALL
-SELECT transaction_date, total, 'Imported from S3' as source
-FROM imported_s3_transactions
-ORDER BY date DESC;
-```
+---
 
 ## ⚙️ Configuration
 
-File SQL settings are available in **VS Code Preferences** → **Settings** → **File SQL**.
+All settings are under **Settings → File SQL**:
 
-### Available Settings
+| Setting | Default | Description |
+|---|---|---|
+| `fileSql.awsProfile` | `default` | AWS credentials profile name from `~/.aws/credentials` |
+| `fileSql.awsRegion` | `us-east-1` | Fallback region — actual region is auto-detected via `GetBucketLocation` |
+| `fileSql.maxResultRows` | `1000` | Maximum rows returned per query (DuckDB wraps your query in `LIMIT N+1`) |
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `fileSql.awsProfile` | String | `default` | AWS credentials profile name for importing S3 files |
-| `fileSql.awsRegion` | String | `us-east-1` | AWS region for S3 bucket access |
-| `fileSql.maxResultRows` | Number | `1000` | Maximum rows returned per query (limits memory usage) |
-
-### Example Configuration
 ```json
 {
   "fileSql.awsProfile": "production",
@@ -172,217 +124,207 @@ File SQL settings are available in **VS Code Preferences** → **Settings** → 
 }
 ```
 
+---
+
+## 🛠️ Commands
+
+Available via the **Command Palette** (`Cmd+Shift+P` / `Ctrl+Shift+P`):
+
+| Command | Description |
+|---|---|
+| **File SQL: Add Path (Local or S3)** | Load a local file/folder or S3 URI |
+| **File SQL: Add Folder** | Open a folder picker and register all supported files |
+| **File SQL: Open Query Editor** | Open the SQL editor webview panel |
+| **File SQL: Clear All Tables** | Remove every loaded table |
+
+Right-click context menu on sidebar items:
+
+| Action | Available On | Description |
+|---|---|---|
+| **Copy Table Name** | Table node | Copy the table name to clipboard |
+| **Rename Table** | Table node | Rename to a valid identifier (alphanumeric + underscores) |
+| **Remove Table** | Table node | Unload a single table |
+| **Copy Column Name** | Column node | Copy the column name to clipboard |
+
+---
+
 ## 🔐 AWS S3 Setup
 
 ### Prerequisites
-1. **AWS Account** with S3 access
-2. **AWS CLI** installed and configured: [Get Started](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-3. **IAM Permissions**: Ensure your AWS user has `s3:GetObject` and `s3:ListBucket` permissions
 
-### Configure AWS Credentials
+- **AWS CLI** installed and configured — [Installation guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- IAM user with `s3:GetObject`, `s3:ListBucket`, and `s3:GetBucketLocation` permissions
 
-#### Using AWS CLI (Recommended)
+### Configure Credentials
+
 ```bash
-aws configure --profile your-profile-name
+# Option 1: AWS CLI profile (recommended)
+aws configure --profile my-profile
+
+# Option 2: Environment variables
+export AWS_ACCESS_KEY_ID=AKIA...
+export AWS_SECRET_ACCESS_KEY=wJalr...
 ```
 
-#### Using Environment Variables
-```bash
-export AWS_ACCESS_KEY_ID=your_access_key
-export AWS_SECRET_ACCESS_KEY=your_secret_key
-export AWS_DEFAULT_REGION=us-east-1
+Then set `fileSql.awsProfile` to `my-profile` in VS Code settings.
+
+### S3 URI Patterns
+
+```
+s3://bucket/path/to/file.parquet       → 1 table named "file"
+s3://bucket/path/to/folder/            → 1 table named "folder" (glob reads all part-files)
 ```
 
-### Import Files from S3
-1. In VS Code settings, set `fileSql.awsProfile` to your configured profile
-2. Click the **+** icon in File SQL Explorer and enter S3 paths:
-   ```
-   s3://my-bucket/data/file.csv
-   s3://my-bucket/data-folder/
-   ```
-3. Files are automatically downloaded and imported as tables for querying
+---
 
-## 📊 Supported File Formats
+## 📋 SQL Examples
 
-| Format | Extension | Support | Notes |
-|--------|-----------|---------|-------|
-| CSV | `.csv` | ✅ Full | Auto-detects delimiters; supports local and S3 import |
-| JSON | `.json`, `.jsonl` | ✅ Full | Supports line-delimited JSON; local and S3 import |
-| Parquet | `.parquet`, `.pq` | ✅ Full | Efficient columnar storage; local and S3 import |
+### Basic Query
+```sql
+SELECT * FROM employees
+WHERE department = 'Engineering'
+ORDER BY hire_date DESC;
+```
 
-## 🛠️ Commands Reference
+### Join Tables from Different Sources
+```sql
+SELECT o.order_id, c.name, o.total
+FROM orders o
+JOIN customers c ON o.customer_id = c.id
+WHERE o.total > 100;
+```
 
-All File SQL commands are accessible via the **Command Palette** (Cmd+Shift+P / Ctrl+Shift+P):
+### Aggregate Parquet Data
+```sql
+SELECT
+  DATE_TRUNC('month', event_date) AS month,
+  COUNT(*) AS events,
+  AVG(duration) AS avg_duration
+FROM event_logs
+GROUP BY month
+ORDER BY month;
+```
 
-| Command | Shortcut | Description |
-|---------|----------|-------------|
-| File SQL: Add Path | — | Load a local file or import from S3 |
-| File SQL: Add Folder | — | Load all files from a local folder |
-| File SQL: Open Query Editor | Cmd+Enter | Open the SQL query editor |
-| File SQL: Clear All Tables | — | Remove all loaded tables from memory |
-| File SQL: Rename Table | — | Rename a table for easier queries |
-| File SQL: Remove Table | — | Unload a specific table |
-| File SQL: Copy Table Name | — | Copy table name to clipboard |
-| File SQL: Copy Column Name | — | Copy column name to clipboard |
-
-## 🎨 Editor Features
-
-### Multi-Tab Query Management
-- Open unlimited query tabs simultaneously
-- Switch between queries with a single click
-- Rename tabs for better organization
-- Auto-save query state (session-based)
-
-### Resizable Editor
-- Drag the editor border to resize vertically
-- Optimize screen real estate for your workflow
-- Persistent layout preferences
-
-### SQL Autocomplete & Syntax Highlighting
-- CodeMirror-powered SQL autocomplete
-- One Dark theme for comfortable viewing
-- Error detection and inline hints
-
-## 🚀 Use Cases
-
-### Data Analysis & Exploration
-- Quickly explore CSV/JSON datasets without loading into external tools
-- Prototype SQL queries before running in production databases
-- Import S3 data lake files for local analysis
-
-### ETL Prototyping
-- Build and test data transformation logic using SQL
-- Import and combine multiple data sources in queries
-- Validate data quality before warehouse ingestion
-
-### S3 Data Lake Queries
-- Import and query data lake files from S3
-- Avoid expensive data warehouse costs for ad-hoc analysis
-- Combine local and imported cloud data in unified queries
-
-### Business Intelligence
-- Generate reports from local and imported data files
-- Create aggregates and summaries on-the-fly
-- Export results for use in BI tools
-
-### Development & Testing
-- Use realistic datasets in development workflows
-- Test SQL logic without database setup
-- Run selective test queries on large files
-
-## 📈 Performance Tips
-
-1. **Filter Early**: Use WHERE clauses to reduce data loaded
-   ```sql
-   SELECT * FROM large_file WHERE date > '2024-01-01'
-   ```
-
-2. **Limit Results**: Set reasonable `maxResultRows` in settings to avoid memory spikes
-
-3. **Aggregate Before Export**: Pre-aggregate data in queries rather than post-processing
-   ```sql
-   SELECT category, SUM(sales) FROM data GROUP BY category
-   ```
-
-4. **Use Parquet for Large Files**: Parquet files are more efficient than CSV for big datasets
-
-5. **Consider File Size**: Large S3 files will take time to download and import; organize data in S3 by splitting into smaller files when possible
-
-## 🔍 Troubleshooting
-
-### Extension Not Loading
-- Ensure VS Code version is 1.85.0 or later
-- Reload the window (Cmd+K Cmd+W / Ctrl+K Ctrl+W)
-
-### S3 Import Issues
-- Verify AWS credentials are configured: `aws sts get-caller-identity`
-- Check IAM permissions include `s3:GetObject` and `s3:ListBucket`
-- Confirm AWS region in settings matches your S3 bucket location
-- Ensure the S3 path is correct: `s3://bucket-name/path/to/file`
-
-### Query Errors
-- Check table names are correctly spelled (case-sensitive in some contexts)
-- Verify column names using the Explorer panel
-- Review DuckDB SQL documentation for syntax: [DuckDB Docs](https://duckdb.org/docs/sql/introduction.html)
-
-### Memory Issues
-- Reduce `maxResultRows` in settings
-- Use filters and aggregations in queries
-- Close unused query tabs
-- Import smaller files or split large S3 files before importing
-
-## 🧪 DuckDB SQL Dialect
-
-File SQL uses [DuckDB SQL](https://duckdb.org/docs/sql/introduction.html), which is compatible with standard SQL but includes powerful extensions:
-
+### DuckDB-Specific Features
 ```sql
 -- JSON extraction
-SELECT json_extract(data, '$.user.name') FROM json_file;
+SELECT json_extract(payload, '$.user.name') AS user_name
+FROM api_logs;
 
--- Array operations
-SELECT unnest(array_col) FROM data;
+-- Unnest arrays
+SELECT unnest(tags) AS tag, COUNT(*) AS cnt
+FROM articles
+GROUP BY tag;
 
--- Date functions
-SELECT NOW(), DATE_TRUNC('month', timestamp_col);
+-- Window functions
+SELECT name, salary,
+  RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS dept_rank
+FROM employees;
 ```
 
-See [DuckDB SQL Documentation](https://duckdb.org/docs/sql/introduction.html) for advanced features.
+See the full [DuckDB SQL documentation](https://duckdb.org/docs/sql/introduction.html) for more.
 
-## 🤝 Contributing
+---
 
-Contributions are welcome! Please follow these steps:
+## 💡 Tips
 
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/your-feature`
-3. **Commit** changes: `git commit -m "Add your feature"`
-4. **Push** to branch: `git push origin feature/your-feature`
-5. **Submit** a Pull Request
+- **Filter early** — use `WHERE` to reduce the data DuckDB processes
+- **Prefer Parquet** — columnar format is significantly faster than CSV for large datasets
+- **Adjust row limit** — increase `fileSql.maxResultRows` if you need to see more results, decrease it to save memory
+- **S3 folder = one table** — point to a partitioned dataset folder and File SQL registers it as a single queryable table
+- **Alt+Click cells** — quickly copy any value from the results grid
 
-### Development Setup
+---
+
+## 🔧 Troubleshooting
+
+### Extension Not Activating
+- Verify VS Code ≥ 1.85.0
+- Reload the window: `Cmd+Shift+P` → **Developer: Reload Window**
+
+### S3 Import Fails
+- Confirm credentials: `aws sts get-caller-identity --profile your-profile`
+- Check IAM permissions: `s3:GetObject`, `s3:ListBucket`, `s3:GetBucketLocation`
+- Ensure the S3 path format is correct (`s3://bucket/key`)
+- The region is auto-detected — the `fileSql.awsRegion` setting is a fallback only
+
+### Query Returns an Error
+- Verify table and column names in the sidebar explorer
+- DuckDB SQL is PostgreSQL-compatible — check [DuckDB docs](https://duckdb.org/docs/sql/introduction.html) for syntax
+
+### Results Truncated
+- The `⚠ results truncated` warning means your query returned more rows than `fileSql.maxResultRows`
+- Increase the limit in settings, or add `LIMIT` / `WHERE` clauses to narrow your query
+
+---
+
+## 🏗️ Development
+
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/arunkumar1997/vscode-sql-files.git
 cd vscode-sql-files
 
 # Install dependencies
 npm install
 
-# Build extension
+# Build (one-shot)
 npm run build
 
-# Watch for changes
+# Watch mode (incremental rebuilds)
 npm run watch
 
-# Open in VS Code with F5 to debug
+# Debug — press F5 in VS Code to launch Extension Development Host
 ```
 
-## 📄 License
+### Build System
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Two esbuild bundles are produced by `esbuild.mjs`:
 
-## 🙏 Acknowledgments
-
-- **[DuckDB](https://duckdb.org)** - High-performance SQL analytics engine
-- **[CodeMirror](https://codemirror.net)** - Extensible code editor
-- **[AWS SDK for JavaScript](https://aws.amazon.com/sdk-for-javascript)** - S3 integration
-- **[VS Code Extension API](https://code.visualstudio.com/api)** - Extension platform
-
-## 📞 Support & Feedback
-
-- **Report Issues**: [GitHub Issues](https://github.com/arunkumar1997/vscode-sql-files/issues)
-- **Request Features**: [GitHub Discussions](https://github.com/arunkumar1997/vscode-sql-files/discussions)
-- **Share Feedback**: Open an issue with the `feedback` label
-
-## 🗺️ Roadmap
-
-- [ ] Support for additional file formats (Excel, Avro, SQLite)
-- [ ] Query result export (CSV, JSON, Parquet)
-- [ ] Saved queries and query history
-- [ ] Data visualization (charts, graphs)
-- [ ] Incremental data loading for large files
-- [ ] GCS (Google Cloud Storage) support
-- [ ] Azure Blob Storage support
+| Bundle | Entry | Output | Platform |
+|---|---|---|---|
+| Extension host | `src/extension.ts` | `dist/extension.js` | Node.js CJS (`duckdb` externalized) |
+| Webview | `src/webview/main.tsx` | `dist/webview.js` + `dist/webview.css` | Browser IIFE |
 
 ---
 
-**⭐ If you find File SQL useful, please star the repository on [GitHub](https://github.com/arunkumar1997/vscode-sql-files) to show your support!**
+## 🤝 Contributing
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/your-feature`
+3. **Commit** your changes: `git commit -m "Add your feature"`
+4. **Push** to your branch: `git push origin feature/your-feature`
+5. **Open** a Pull Request
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] Query result export (CSV, JSON, Parquet)
+- [ ] Saved queries and query history persistence
+- [ ] Data visualization (charts and graphs)
+- [ ] Additional file formats (Excel, Avro, SQLite)
+
+---
+
+## 🙏 Acknowledgments
+
+- [DuckDB](https://duckdb.org) — high-performance in-process SQL analytics engine
+- [CodeMirror 6](https://codemirror.net) — extensible code editor component
+- [AWS SDK for JavaScript v3](https://aws.amazon.com/sdk-for-javascript/) — S3 client and credential handling
+- [VS Code Extension API](https://code.visualstudio.com/api) — extension platform
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+## 📬 Feedback & Issues
+
+- **Report bugs**: [GitHub Issues](https://github.com/arunkumar1997/vscode-sql-files/issues)
+- **Request features**: [GitHub Discussions](https://github.com/arunkumar1997/vscode-sql-files/discussions)
+
+**⭐ If File SQL saves you time, [star the repo](https://github.com/arunkumar1997/vscode-sql-files) — it helps others find it!**
