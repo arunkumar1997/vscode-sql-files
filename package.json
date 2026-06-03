@@ -10,6 +10,18 @@
     "Data Science",
     "Other"
   ],
+  "keywords": [
+    "duckdb",
+    "sql",
+    "csv",
+    "parquet",
+    "json",
+    "s3",
+    "data",
+    "query",
+    "files",
+    "analytics"
+  ],
   "activationEvents": [
     "onStartupFinished"
   ],
