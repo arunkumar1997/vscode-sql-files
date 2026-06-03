@@ -6,3 +6,11 @@ PLAN.md
 *.map
 **/*.ts
 **/*.tsx
+src/
+
+# Ignore DuckDB C++ source and tests (saves ~68MB)
+node_modules/duckdb/src/
+node_modules/duckdb/test/
+node_modules/duckdb/scripts/
+node_modules/duckdb/vendor/
+node_modules/duckdb/build/

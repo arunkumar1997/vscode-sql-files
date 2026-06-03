@@ -5,7 +5,7 @@ const watch = argv.includes('--watch');
 
 const sharedOptions = {
   bundle: true,
-  minify: false,
+  minify: !watch,
   sourcemap: true,
   logLevel: 'info',
 };
