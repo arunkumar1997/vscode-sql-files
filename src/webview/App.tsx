@@ -25,7 +25,7 @@ function createTab(): TabState {
   const n = _tabSeq++;
   return {
     id: `tab-${n}`,
-    label: `ARTS-untitled-${n}`,
+    label: `untitled-${n}`,
     sql: "SELECT *\nFROM ",
     result: null,
     error: null,
@@ -70,11 +70,11 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                    ...t,
-                    result: msg.payload as QueryResult,
-                    error: null,
-                    running: false,
-                  }
+                  ...t,
+                  result: msg.payload as QueryResult,
+                  error: null,
+                  running: false,
+                }
                 : t,
             ),
           );
@@ -84,11 +84,11 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                    ...t,
-                    error: (msg.payload as { message: string }).message,
-                    result: null,
-                    running: false,
-                  }
+                  ...t,
+                  error: (msg.payload as { message: string }).message,
+                  result: null,
+                  running: false,
+                }
                 : t,
             ),
           );
@@ -203,7 +203,7 @@ export function App(): JSX.Element {
   /** Get or create a stable runRef for a given tab */
   function getRunRef(tabId: string): React.MutableRefObject<() => void> {
     if (!runRefs.current.has(tabId)) {
-      runRefs.current.set(tabId, { current: () => {} });
+      runRefs.current.set(tabId, { current: () => { } });
     }
     return runRefs.current.get(tabId)!;
   }

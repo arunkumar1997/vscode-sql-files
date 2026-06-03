@@ -19,6 +19,42 @@ export async function addPath(
   registry: TableRegistry,
   engine: DuckDBEngine,
 ): Promise<void> {
+  const pick = await vscode.window.showQuickPick(
+    [
+      {
+        label: "$(edit) Enter Path",
+        description: "Type a local file/folder path or s3:// URI",
+        id: "enter",
+      },
+      {
+        label: "$(file) Browse File",
+        description: "Pick a file from your filesystem",
+        id: "file",
+      },
+    ],
+    {
+      placeHolder: "How would you like to add a data source?",
+    },
+  );
+
+  if (!pick) {
+    return;
+  }
+
+  switch (pick.id) {
+    case "enter":
+      await handleEnterPath(registry, engine);
+      break;
+    case "file":
+      await handleBrowseFile(registry, engine);
+      break;
+  }
+}
+
+async function handleEnterPath(
+  registry: TableRegistry,
+  engine: DuckDBEngine,
+): Promise<void> {
   const input = await vscode.window.showInputBox({
     prompt: "Enter a local file/folder path or s3:// URI",
     placeHolder: "/path/to/file.csv  OR  s3://bucket/prefix/",
@@ -34,6 +70,108 @@ export async function addPath(
   } else {
     await handleLocalPath(trimmed, registry, engine);
   }
+}
+
+async function handleBrowseFile(
+  registry: TableRegistry,
+  engine: DuckDBEngine,
+): Promise<void> {
+  const uris = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: true,
+    openLabel: "Load File",
+    filters: {
+      "Supported Data Files": [
+        "csv", "tsv", "json", "jsonl", "ndjson", "parquet", "txt", "log",
+      ],
+      "CSV / TSV": ["csv", "tsv"],
+      "JSON": ["json", "jsonl", "ndjson"],
+      "Parquet": ["parquet"],
+      "Text / Log": ["txt", "log"],
+      "All Files": ["*"],
+    },
+  });
+
+  if (!uris || uris.length === 0) {
+    return;
+  }
+
+  log(`User browsed ${uris.length} file(s)`);
+  const entries: TableEntry[] = [];
+  for (const uri of uris) {
+    const filePath = uri.fsPath;
+    const entry = entryFromLocalFile(filePath);
+    if (entry) {
+      entries.push(entry);
+    } else {
+      log(`Skipping unsupported file: ${filePath}`);
+      vscode.window.showWarningMessage(
+        `Unsupported file type: ${path.extname(filePath)}`,
+      );
+    }
+  }
+
+  if (entries.length === 0) {
+    vscode.window.showWarningMessage("No supported files selected.");
+    return;
+  }
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "File SQL: Loading file(s)…",
+    },
+    async (progress) => {
+      await registerEntries(entries, registry, engine, progress);
+      log(`Successfully loaded ${entries.length} table(s) via file browser`);
+      vscode.window.showInformationMessage(
+        `File SQL: Loaded ${entries.length} table(s).`,
+      );
+    },
+  );
+}
+
+async function handleBrowseFolder(
+  registry: TableRegistry,
+  engine: DuckDBEngine,
+): Promise<void> {
+  const uris = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: "Load Folder",
+  });
+
+  if (!uris || uris.length === 0) {
+    return;
+  }
+
+  const folderPath = uris[0].fsPath;
+  log(`User browsed folder: ${folderPath}`);
+  const entries = scanFolder(folderPath);
+
+  if (entries.length === 0) {
+    vscode.window.showWarningMessage(
+      "No supported files found in that folder.",
+    );
+    return;
+  }
+
+  log(`Found ${entries.length} supported file(s) in browsed folder`);
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "File SQL: Loading folder…",
+    },
+    async (progress) => {
+      await registerEntries(entries, registry, engine, progress);
+      log(`Successfully loaded ${entries.length} table(s) from browsed folder`);
+      vscode.window.showInformationMessage(
+        `File SQL: Loaded ${entries.length} table(s) from folder.`,
+      );
+    },
+  );
 }
 
 async function handleS3Path(
@@ -176,7 +314,7 @@ async function handleLocalPath(
       );
       return;
     }
-    await registerEntries([entry], registry, engine, { report: () => {} });
+    await registerEntries([entry], registry, engine, { report: () => { } });
     log("Successfully loaded 1 table from local file");
     vscode.window.showInformationMessage("File SQL: Loaded 1 table.");
   }

@@ -72,15 +72,33 @@ export class DuckDBEngine {
     const truncated = rows.length > maxRows;
     const sliced = truncated ? rows.slice(0, maxRows) : rows;
 
+    // DuckDB returns BigInt for integer columns — JSON.stringify (used by
+    // VS Code postMessage) cannot serialize BigInt, so convert them here.
+    const sanitized = sliced.map((row) => {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (typeof v === "bigint") {
+          out[k] =
+            v >= BigInt(Number.MIN_SAFE_INTEGER) &&
+            v <= BigInt(Number.MAX_SAFE_INTEGER)
+              ? Number(v)
+              : String(v);
+        } else {
+          out[k] = v;
+        }
+      }
+      return out;
+    });
+
     const columns: ColumnInfo[] =
-      sliced.length > 0
-        ? Object.keys(sliced[0]).map((name) => ({ name, type: "VARCHAR" }))
+      sanitized.length > 0
+        ? Object.keys(sanitized[0]).map((name) => ({ name, type: "VARCHAR" }))
         : [];
 
     log(
-      `Query returned ${sliced.length} row(s)${truncated ? " (truncated)" : ""}`,
+      `Query returned ${sanitized.length} row(s)${truncated ? " (truncated)" : ""}`,
     );
-    return { columns, rows: sliced, rowCount: sliced.length, truncated };
+    return { columns, rows: sanitized, rowCount: sanitized.length, truncated };
   }
 
   private buildViewSql(name: string, path: string, type: FileType): string {
