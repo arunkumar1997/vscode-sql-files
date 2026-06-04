@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isQueryEditorOpen } from "./openQueryEditor";
 import { DuckDBEngine } from "../duckdbEngine";
 import { TableRegistry } from "../tableRegistry";
 import { scanFolder } from "../fileScanner";
@@ -50,6 +51,9 @@ export async function addFolder(
       vscode.window.showInformationMessage(
         `File SQL: Loaded ${entries.length} table(s) from folder.`,
       );
+      if (!isQueryEditorOpen()) {
+        vscode.commands.executeCommand("fileSql.openQueryEditor");
+      }
     },
   );
 }

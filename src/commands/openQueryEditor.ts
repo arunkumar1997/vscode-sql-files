@@ -6,11 +6,22 @@ import { getConfig } from "../s3Handler";
 
 let panel: vscode.WebviewPanel | undefined;
 
+export function isQueryEditorOpen(): boolean {
+  return panel !== undefined;
+}
+
 export function openQueryEditor(
   context: vscode.ExtensionContext,
   registry: TableRegistry,
   engine: DuckDBEngine,
 ): void {
+  if (registry.getAll().length === 0) {
+    vscode.window.showInformationMessage("Please add a file or folder before opening the Query Editor.");
+    if (panel) {
+      panel.dispose();
+    }
+    return;
+  }
   if (panel) {
     panel.reveal(vscode.ViewColumn.One);
     sendTables(registry.getAll());
@@ -37,7 +48,14 @@ export function openQueryEditor(
 
   panel.webview.html = buildHtml(panel.webview, scriptUri, styleUri);
 
-  const tablesSub = registry.onDidChange(() => sendTables(registry.getAll()));
+  const tablesSub = registry.onDidChange(() => {
+    const tables = registry.getAll();
+    if (tables.length === 0) {
+      panel?.dispose();
+    } else {
+      sendTables(tables);
+    }
+  });
   context.subscriptions.push(tablesSub);
 
   panel.webview.onDidReceiveMessage(

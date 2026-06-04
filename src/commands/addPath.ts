@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
+import { isQueryEditorOpen } from "./openQueryEditor";
 import { DuckDBEngine } from "../duckdbEngine";
 import { entryFromLocalFile, scanFolder } from "../fileScanner";
 import {
@@ -128,6 +129,9 @@ async function handleBrowseFile(
       vscode.window.showInformationMessage(
         `File SQL: Loaded ${entries.length} table(s).`,
       );
+      if (!isQueryEditorOpen()) {
+        vscode.commands.executeCommand("fileSql.openQueryEditor");
+      }
     },
   );
 }
@@ -170,6 +174,9 @@ async function handleBrowseFolder(
       vscode.window.showInformationMessage(
         `File SQL: Loaded ${entries.length} table(s) from folder.`,
       );
+      if (!isQueryEditorOpen()) {
+        vscode.commands.executeCommand("fileSql.openQueryEditor");
+      }
     },
   );
 }
@@ -256,6 +263,9 @@ async function handleS3Path(
         vscode.window.showInformationMessage(
           `File SQL: Loaded ${entries.length} table(s) from S3 (${parsed.bucket}).`,
         );
+        if (!isQueryEditorOpen()) {
+          vscode.commands.executeCommand("fileSql.openQueryEditor");
+        }
       } catch (err: unknown) {
         logError("S3 loading failed", err);
         vscode.window.showErrorMessage(
@@ -302,6 +312,9 @@ async function handleLocalPath(
         vscode.window.showInformationMessage(
           `File SQL: Loaded ${entries.length} table(s).`,
         );
+        if (!isQueryEditorOpen()) {
+          vscode.commands.executeCommand("fileSql.openQueryEditor");
+        }
       },
     );
   } else {
@@ -317,6 +330,9 @@ async function handleLocalPath(
     await registerEntries([entry], registry, engine, { report: () => { } });
     log("Successfully loaded 1 table from local file");
     vscode.window.showInformationMessage("File SQL: Loaded 1 table.");
+    if (!isQueryEditorOpen()) {
+      vscode.commands.executeCommand("fileSql.openQueryEditor");
+    }
   }
 }
 
