@@ -1,15 +1,24 @@
 name: Release
 
+# Manual-only. Tag pushes intentionally do NOT publish — verify the artifacts
+# produced by `build.yml` first, then trigger this workflow from the Actions
+# tab with `publish=true` (and optionally `tag=vX.Y.Z` to attach a GitHub
+# Release).
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish to Marketplace & Open VSX"
+        description: "Publish all VSIX files to VS Code Marketplace (and Open VSX if OVSX_PAT is set)"
         type: boolean
         default: false
+      create_release:
+        description: "Create a draft GitHub Release with the VSIX files attached"
+        type: boolean
+        default: false
+      tag:
+        description: "Tag name for the GitHub Release (only used if create_release=true). Defaults to package.json version."
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -32,24 +41,21 @@ jobs:
           - target: darwin-arm64
             os: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build bundles
-        run: npm run build
-
       - name: Package VSIX for ${{ matrix.target }}
         run: node scripts/package.mjs --target ${{ matrix.target }}
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: file-sql-${{ matrix.target }}
           path: out/*.vsix
@@ -59,20 +65,20 @@ jobs:
     name: Publish to Marketplaces
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    if: ${{ inputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Download all VSIX artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: out
           merge-multiple: true
@@ -103,19 +109,32 @@ jobs:
     name: Attach VSIX to GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ inputs.create_release }}
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
+
       - name: Download all VSIX artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: out
           merge-multiple: true
 
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            version=$(node -p "require('./package.json').version")
+            echo "value=v$version" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.value }}
           files: out/*.vsix
           draft: true
           generate_release_notes: true

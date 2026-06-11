@@ -2,36 +2,52 @@ name: Build and Package VSIX
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
-  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+    branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            os: windows-latest
+          - target: win32-arm64
+            os: windows-latest
+          - target: linux-x64
+            os: ubuntu-latest
+          - target: linux-arm64
+            os: ubuntu-latest
+          - target: darwin-x64
+            os: macos-13
+          - target: darwin-arm64
+            os: macos-14
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '24' # Updated to Node 24 to avoid deprecation warnings
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install Dependencies
-        run: npm ci # Uses clean install for more reliable builds
+        run: npm ci
 
-      - name: Build and Package Extension
-        run: bash build.sh
+      - name: Package VSIX for ${{ matrix.target }}
+        run: node scripts/package.mjs --target ${{ matrix.target }}
 
       - name: Upload VSIX Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
-          name: file-sql-extension
-          path: '*.vsix'
-          retention-days: 14 # Keeps the artifact for 14 days
+          name: file-sql-${{ matrix.target }}
+          path: out/*.vsix
+          if-no-files-found: error
+          retention-days: 14
