@@ -8,9 +8,7 @@ PLAN.md
 **/*.tsx
 src/
 
-# Ignore DuckDB C++ source and tests (saves ~68MB)
-node_modules/duckdb/src/
-node_modules/duckdb/test/
-node_modules/duckdb/scripts/
-node_modules/duckdb/vendor/
-node_modules/duckdb/build/
+# Keep only what's needed from @duckdb/node-api and platform bindings
+# Exclude test/build/source artefacts that bloat the VSIX
+node_modules/duckdb/
+node_modules/@duckdb/duckdb-wasm/

@@ -1,24 +1,16 @@
-import * as duckdb from "duckdb";
+import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import { ColumnInfo, FileType, QueryResult, TableEntry } from "./types";
 import { log, logError } from "./logger";
 
 export class DuckDBEngine {
-  private db!: duckdb.Database;
-  private conn!: duckdb.Connection;
+  private instance!: DuckDBInstance;
+  private conn!: DuckDBConnection;
   private ready = false;
 
   async init(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db = new duckdb.Database(":memory:", (err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        this.conn = this.db.connect();
-        this.ready = true;
-        resolve();
-      });
-    });
+    this.instance = await DuckDBInstance.create(":memory:");
+    this.conn = await this.instance.connect();
+    this.ready = true;
   }
 
   async configureS3(
@@ -27,12 +19,13 @@ export class DuckDBEngine {
     token: string | undefined,
     region: string,
   ): Promise<void> {
-    await this.exec(`INSTALL httpfs; LOAD httpfs;`);
-    await this.exec(`SET s3_region='${region}';`);
-    await this.exec(`SET s3_access_key_id='${keyId}';`);
-    await this.exec(`SET s3_secret_access_key='${secret}';`);
+    await this.exec(`INSTALL httpfs`);
+    await this.exec(`LOAD httpfs`);
+    await this.exec(`SET s3_region='${region}'`);
+    await this.exec(`SET s3_access_key_id='${keyId}'`);
+    await this.exec(`SET s3_secret_access_key='${secret}'`);
     if (token) {
-      await this.exec(`SET s3_session_token='${token}';`);
+      await this.exec(`SET s3_session_token='${token}'`);
     }
   }
 
@@ -50,11 +43,11 @@ export class DuckDBEngine {
   }
 
   async dropTable(name: string): Promise<void> {
-    await this.exec(`DROP VIEW IF EXISTS "${name}";`);
+    await this.exec(`DROP VIEW IF EXISTS "${name}"`);
   }
 
   async renameTable(oldName: string, entry: TableEntry): Promise<void> {
-    await this.exec(`DROP VIEW IF EXISTS "${oldName}";`);
+    await this.exec(`DROP VIEW IF EXISTS "${oldName}"`);
     const viewSql = this.buildViewSql(
       entry.name,
       entry.filePath,
@@ -68,9 +61,10 @@ export class DuckDBEngine {
       `Executing query: ${sql.substring(0, 100)}${sql.length > 100 ? "..." : ""}`,
     );
     const wrapped = `SELECT * FROM (${sql.replace(/;+\s*$/, "")}) __q LIMIT ${maxRows + 1}`;
-    const rows = await this.all<Record<string, unknown>>(wrapped);
-    const truncated = rows.length > maxRows;
-    const sliced = truncated ? rows.slice(0, maxRows) : rows;
+    const reader = await this.conn.runAndReadAll(wrapped);
+    const allRows = reader.getRowObjects() as Record<string, unknown>[];
+    const truncated = allRows.length > maxRows;
+    const sliced = truncated ? allRows.slice(0, maxRows) : allRows;
 
     // DuckDB returns BigInt for integer columns — JSON.stringify (used by
     // VS Code postMessage) cannot serialize BigInt, so convert them here.
@@ -90,10 +84,11 @@ export class DuckDBEngine {
       return out;
     });
 
-    const columns: ColumnInfo[] =
-      sanitized.length > 0
-        ? Object.keys(sanitized[0]).map((name) => ({ name, type: "VARCHAR" }))
-        : [];
+    const columnNames = reader.columnNames();
+    const columns: ColumnInfo[] = columnNames.map((name) => ({
+      name,
+      type: "VARCHAR",
+    }));
 
     log(
       `Query returned ${sanitized.length} row(s)${truncated ? " (truncated)" : ""}`,
@@ -117,35 +112,25 @@ export class DuckDBEngine {
         readExpr = `read_csv('${path}', DELIM='\n', COLUMNS={'line':'VARCHAR'})`;
         break;
     }
-    return `CREATE OR REPLACE VIEW "${name}" AS SELECT * FROM ${readExpr};`;
+    return `CREATE OR REPLACE VIEW "${name}" AS SELECT * FROM ${readExpr}`;
   }
 
   private async introspectColumns(tableName: string): Promise<ColumnInfo[]> {
-    const rows = await this.all<{ column_name: string; column_type: string }>(
-      `DESCRIBE "${tableName}";`,
-    );
+    const reader = await this.conn.runAndReadAll(`DESCRIBE "${tableName}"`);
+    const rows = reader.getRowObjects() as {
+      column_name: string;
+      column_type: string;
+    }[];
     return rows.map((r) => ({ name: r.column_name, type: r.column_type }));
   }
 
-  private exec(sql: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.conn.exec(sql, (err) => {
-        if (err) {
-          logError(`Execution failed: ${sql.substring(0, 100)}`, err);
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  private all<T>(sql: string): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.conn.all(sql, (err, rows) =>
-        err ? reject(err) : resolve(rows as T[]),
-      );
-    });
+  private async exec(sql: string): Promise<void> {
+    try {
+      await this.conn.run(sql);
+    } catch (err) {
+      logError(`Execution failed: ${sql.substring(0, 100)}`, err as Error);
+      throw err;
+    }
   }
 
   isReady(): boolean {
@@ -154,8 +139,7 @@ export class DuckDBEngine {
 
   dispose(): void {
     try {
-      this.conn?.close();
-      this.db?.close(() => {});
+      this.conn?.closeSync();
     } catch {}
   }
 }

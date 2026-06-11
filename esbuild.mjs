@@ -18,7 +18,7 @@ const extensionBuild = esbuild.context({
   format: 'cjs',
   platform: 'node',
   target: 'node20',
-  external: ['vscode', 'duckdb', 'nock', 'mock-aws-s3', 'aws-sdk'],
+  external: ['vscode', '@duckdb/node-api', '@duckdb/node-bindings', 'nock', 'mock-aws-s3', 'aws-sdk'],
 });
 
 // Webview bundle (browser ESM → IIFE)
