@@ -2,7 +2,7 @@
   "name": "file-sql",
   "displayName": "File SQL",
   "description": "Query local and S3 files (CSV, JSON, Parquet) with SQL using DuckDB",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "publisher": "arunkumar1997",
   "engines": {
     "vscode": "^1.85.0"

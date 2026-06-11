@@ -318,16 +318,14 @@ npm run package:all
 
 Each VSIX is written to `out/file-sql-<target>-<version>.vsix`.
 
-Releases are fully automated by `.github/workflows/release.yml`:
+CI builds all 6 VSIX files in parallel on every push to `main` via [`.github/workflows/build.yml`](.github/workflows/build.yml). Download them from the run's **Artifacts** section.
 
-1. Bump `version` in `package.json` and commit.
-2. Tag the commit: `git tag vX.Y.Z && git push --tags`.
-3. CI builds all 6 VSIX files in parallel, publishes them to the VS Code Marketplace (and Open VSX if `OVSX_PAT` is set), and attaches them to a **draft** GitHub Release.
+Releases are published manually:
 
-Required secrets:
-
-- `VSCE_PAT` — VS Code Marketplace publish token.
-- `OVSX_PAT` — Open VSX publish token *(optional)*.
+1. Bump `version` in `package.json` and push.
+2. Download the 6 VSIX artifacts from the latest CI run.
+3. Upload them to https://marketplace.visualstudio.com/manage (drag-and-drop each one as a platform-specific variant of the same version).
+4. *(Optional)* Publish to Open VSX with `ovsx publish <file>.vsix -p <OVSX_PAT>` for each VSIX.
 
 ---
 
