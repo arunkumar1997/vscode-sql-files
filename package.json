@@ -164,11 +164,13 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "compile": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src --ext ts,tsx"
+    "lint": "eslint src --ext ts,tsx",
+    "package:current": "node scripts/package.mjs --current",
+    "package:all": "node scripts/package.mjs --all",
+    "package:target": "node scripts/package.mjs --target"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
@@ -183,6 +185,7 @@
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

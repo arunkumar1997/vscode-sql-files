@@ -288,6 +288,47 @@ Two esbuild bundles are produced by `esbuild.mjs`:
 | Extension host | `src/extension.ts` | `dist/extension.js` | Node.js CJS (`duckdb` externalized) |
 | Webview | `src/webview/main.tsx` | `dist/webview.js` + `dist/webview.css` | Browser IIFE |
 
+### Packaging & Release
+
+File SQL ships as **platform-specific VSIX files** — one per supported `(os, arch)` — because DuckDB's native bindings are not portable. The VS Code Marketplace serves the correct VSIX to each user automatically.
+
+Supported targets:
+
+| VS Code target  | Built on (CI)      |
+|-----------------|--------------------|
+| `win32-x64`     | `windows-latest`   |
+| `win32-arm64`   | `windows-latest` (cross-installed) |
+| `linux-x64`     | `ubuntu-latest`    |
+| `linux-arm64`   | `ubuntu-latest` (cross-installed)  |
+| `darwin-x64`    | `macos-13`         |
+| `darwin-arm64`  | `macos-14`         |
+
+Local packaging:
+
+```bash
+# VSIX for the current host (fastest, good for smoke-testing)
+npm run package:current
+
+# A specific target (binding is downloaded if missing)
+npm run package:target -- linux-x64
+
+# Every supported target — produces 6 files in ./out
+npm run package:all
+```
+
+Each VSIX is written to `out/file-sql-<target>-<version>.vsix`.
+
+Releases are fully automated by `.github/workflows/release.yml`:
+
+1. Bump `version` in `package.json` and commit.
+2. Tag the commit: `git tag vX.Y.Z && git push --tags`.
+3. CI builds all 6 VSIX files in parallel, publishes them to the VS Code Marketplace (and Open VSX if `OVSX_PAT` is set), and attaches them to a **draft** GitHub Release.
+
+Required secrets:
+
+- `VSCE_PAT` — VS Code Marketplace publish token.
+- `OVSX_PAT` — Open VSX publish token *(optional)*.
+
 ---
 
 ## 🤝 Contributing

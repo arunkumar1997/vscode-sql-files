@@ -1,22 +1,18 @@
 #!/bin/bash
+# Thin wrapper kept for backward compatibility.
+# For per-platform VSIX builds use:
+#   npm run package:current           # build VSIX for this host
+#   npm run package:all               # build VSIX for every supported target
+#   npm run package:target <target>   # e.g. linux-x64, darwin-arm64
+#
+# Releases are produced by .github/workflows/release.yml on `v*` tags.
 set -e
 
 echo "Installing dependencies..."
 npm install
 
-echo "Installing all platform-specific DuckDB binaries for cross-platform VSIX..."
-# npm install --no-save \
-#   @duckdb/node-bindings-linux-x64 \
-#   @duckdb/node-bindings-linux-arm64 \
-#   @duckdb/node-bindings-win32-x64 \
-#   @duckdb/node-bindings-darwin-arm64 \
-#   @duckdb/node-bindings-darwin-x64
+echo "Packaging VSIX for current host..."
+npm run package:current
 
-echo "Building extension..."
-npm run build
-
-echo "Packaging VSIX..."
-npx @vscode/vsce package --allow-missing-repository --skip-license --allow-star-activation
-
-echo "Done! VSIX file:"
-ls -la *.vsix
+echo "Done! VSIX file(s):"
+ls -la out/*.vsix

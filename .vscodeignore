@@ -3,10 +3,15 @@
 esbuild.mjs
 tsconfig*.json
 PLAN.md
+ARCHITECTURE.md
 *.map
 **/*.ts
 **/*.tsx
 src/
+scripts/
+out/
+build.sh
+.github/
 
 # Keep only what's needed from @duckdb/node-api and platform bindings
 # Exclude test/build/source artefacts that bloat the VSIX
