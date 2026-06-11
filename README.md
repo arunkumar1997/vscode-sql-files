@@ -294,14 +294,14 @@ File SQL ships as **platform-specific VSIX files** — one per supported `(os, a
 
 Supported targets:
 
-| VS Code target  | Built on (CI)      |
-|-----------------|--------------------|
-| `win32-x64`     | `windows-latest`   |
-| `win32-arm64`   | `windows-latest` (cross-installed) |
-| `linux-x64`     | `ubuntu-latest`    |
-| `linux-arm64`   | `ubuntu-latest` (cross-installed)  |
-| `darwin-x64`    | `macos-13`         |
-| `darwin-arm64`  | `macos-14`         |
+| VS Code target  | Built on (CI)         |
+|-----------------|-----------------------|
+| `win32-x64`     | `windows-latest`      |
+| `win32-arm64`   | `windows-11-arm`      |
+| `linux-x64`     | `ubuntu-latest`       |
+| `linux-arm64`   | `ubuntu-24.04-arm`    |
+| `darwin-x64`    | `macos-26-intel`      |
+| `darwin-arm64`  | `macos-26`            |
 
 Local packaging:
 
