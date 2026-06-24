@@ -59,11 +59,10 @@ export async function resolveAwsCredentials(profile: string): Promise<{
 // Detect the real bucket region via GetBucketLocation (works from any region)
 export async function detectBucketRegion(
   bucket: string,
-  credentials: { keyId: string; secret: string; token?: string }
+  credentials: { keyId: string; secret: string; token?: string },
 ): Promise<string> {
-  const { S3Client, GetBucketLocationCommand } = await import(
-    "@aws-sdk/client-s3"
-  );
+  const { S3Client, GetBucketLocationCommand } =
+    await import("@aws-sdk/client-s3");
   // us-east-1 endpoint can answer GetBucketLocation for all buckets
   const client = new S3Client({
     region: "us-east-1",
@@ -73,7 +72,9 @@ export async function detectBucketRegion(
       sessionToken: credentials.token,
     },
   });
-  const resp = await client.send(new GetBucketLocationCommand({ Bucket: bucket }));
+  const resp = await client.send(
+    new GetBucketLocationCommand({ Bucket: bucket }),
+  );
   // LocationConstraint is null/undefined for us-east-1 buckets
   return resp.LocationConstraint ?? "us-east-1";
 }
@@ -82,7 +83,7 @@ export async function listS3Keys(
   bucket: string,
   prefix: string,
   region: string,
-  credentials: { keyId: string; secret: string; token?: string }
+  credentials: { keyId: string; secret: string; token?: string },
 ): Promise<string[]> {
   const { S3Client, ListObjectsV2Command } = await import("@aws-sdk/client-s3");
   const client = new S3Client({
@@ -103,7 +104,7 @@ export async function listS3Keys(
         Bucket: bucket,
         Prefix: prefix,
         ContinuationToken: continuationToken,
-      })
+      }),
     );
     for (const obj of resp.Contents ?? []) {
       if (obj.Key) {
@@ -122,7 +123,7 @@ export async function downloadS3File(
   key: string,
   destPath: string,
   credentials: { keyId: string; secret: string; token?: string },
-  region: string
+  region: string,
 ): Promise<void> {
   const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
   const { pipeline } = await import("stream/promises");
@@ -137,7 +138,9 @@ export async function downloadS3File(
     },
   });
 
-  const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const resp = await client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await pipeline(resp.Body as any, createWriteStream(destPath));
 }
@@ -150,7 +153,7 @@ export async function downloadS3Folder(
   keys: string[],
   credentials: { keyId: string; secret: string; token?: string },
   region: string,
-  progress: vscode.Progress<{ message?: string }>
+  progress: vscode.Progress<{ message?: string }>,
 ): Promise<TableEntry | null> {
   const supportedKeys = keys.filter((k) => detectFileType(k) !== null);
   if (supportedKeys.length === 0) {
@@ -163,7 +166,7 @@ export async function downloadS3Folder(
 
   // All part-files in a partition share the same file type; use the first to detect
   const fileType = detectFileType(supportedKeys[0])!;
-  const ext = path.extname(supportedKeys[0]);   // e.g. ".parquet"
+  const ext = path.extname(supportedKeys[0]); // e.g. ".parquet"
 
   const tempDir = ensureTempDir();
   const localDir = path.join(tempDir, tableName);
@@ -172,7 +175,13 @@ export async function downloadS3Folder(
   for (const key of supportedKeys) {
     const filename = path.basename(key);
     progress.report({ message: `Downloading ${filename}…` });
-    await downloadS3File(bucket, key, path.join(localDir, filename), credentials, region);
+    await downloadS3File(
+      bucket,
+      key,
+      path.join(localDir, filename),
+      credentials,
+      region,
+    );
   }
 
   // DuckDB glob — reads all matching files as one table
@@ -193,7 +202,7 @@ export async function downloadS3Entries(
   keys: string[],
   credentials: { keyId: string; secret: string; token?: string },
   region: string,
-  progress: vscode.Progress<{ message?: string }>
+  progress: vscode.Progress<{ message?: string }>,
 ): Promise<TableEntry[]> {
   const tempDir = ensureTempDir();
   const entries: TableEntry[] = [];
@@ -220,8 +229,8 @@ export async function downloadS3Entries(
 
     entries.push({
       name,
-      filePath: localPath,   // DuckDB reads from here
-      sourceUri: s3Uri,      // shown in UI
+      filePath: localPath, // DuckDB reads from here
+      sourceUri: s3Uri, // shown in UI
       fileType,
       isS3: true,
     });
@@ -230,7 +239,23 @@ export async function downloadS3Entries(
   return entries;
 }
 
-export function entryFromS3File(s3Uri: string): S3ParseResult & { fileType: ReturnType<typeof detectFileType> } | null {
+// Group S3 keys by their immediate parent prefix (leaf directory).
+// Each unique parent prefix becomes one table — mirrors the local scanFolder logic.
+export function groupKeysByLeafPrefix(keys: string[]): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const key of keys) {
+    const dir = key.substring(0, key.lastIndexOf("/") + 1);
+    if (!groups.has(dir)) {
+      groups.set(dir, []);
+    }
+    groups.get(dir)!.push(key);
+  }
+  return groups;
+}
+
+export function entryFromS3File(
+  s3Uri: string,
+): (S3ParseResult & { fileType: ReturnType<typeof detectFileType> }) | null {
   const parsed = parseS3Uri(s3Uri);
   if (!parsed || parsed.isFolder) {
     return null;
@@ -242,7 +267,11 @@ export function entryFromS3File(s3Uri: string): S3ParseResult & { fileType: Retu
   return { ...parsed, fileType };
 }
 
-export function getConfig(): { profile: string; region: string; maxRows: number } {
+export function getConfig(): {
+  profile: string;
+  region: string;
+  maxRows: number;
+} {
   const cfg = vscode.workspace.getConfiguration("fileSql");
   return {
     profile: cfg.get<string>("awsProfile", "default"),

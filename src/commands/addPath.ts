@@ -8,6 +8,7 @@ import {
   downloadS3Entries,
   downloadS3Folder,
   getConfig,
+  groupKeysByLeafPrefix,
   listS3Keys,
   parseS3Uri,
   resolveAwsCredentials,
@@ -84,11 +85,18 @@ async function handleBrowseFile(
     openLabel: "Load File",
     filters: {
       "Supported Data Files": [
-        "csv", "tsv", "json", "jsonl", "ndjson", "parquet", "txt", "log",
+        "csv",
+        "tsv",
+        "json",
+        "jsonl",
+        "ndjson",
+        "parquet",
+        "txt",
+        "log",
       ],
       "CSV / TSV": ["csv", "tsv"],
-      "JSON": ["json", "jsonl", "ndjson"],
-      "Parquet": ["parquet"],
+      JSON: ["json", "jsonl", "ndjson"],
+      Parquet: ["parquet"],
       "Text / Log": ["txt", "log"],
       "All Files": ["*"],
     },
@@ -230,16 +238,23 @@ async function handleS3Path(
             );
             return;
           }
-          // Folder → one table named after the folder, glob-reads all part files
-          const entry = await downloadS3Folder(
-            parsed.bucket,
-            parsed.prefix,
-            keys,
-            creds,
-            region,
-            progress,
-          );
-          entries = entry ? [entry] : [];
+          // Group keys by leaf directory — each subfolder becomes its own table,
+          // mirroring the local scanFolder behaviour.
+          const leafGroups = groupKeysByLeafPrefix(keys);
+          entries = [];
+          for (const [leafPrefix, leafKeys] of leafGroups) {
+            const entry = await downloadS3Folder(
+              parsed.bucket,
+              leafPrefix,
+              leafKeys,
+              creds,
+              region,
+              progress,
+            );
+            if (entry) {
+              entries.push(entry);
+            }
+          }
         } else {
           // Single file — key is the prefix without trailing slash
           entries = await downloadS3Entries(
@@ -327,7 +342,7 @@ async function handleLocalPath(
       );
       return;
     }
-    await registerEntries([entry], registry, engine, { report: () => { } });
+    await registerEntries([entry], registry, engine, { report: () => {} });
     log("Successfully loaded 1 table from local file");
     vscode.window.showInformationMessage("File SQL: Loaded 1 table.");
     if (!isQueryEditorOpen()) {

@@ -66,20 +66,57 @@ export class DuckDBEngine {
     const truncated = allRows.length > maxRows;
     const sliced = truncated ? allRows.slice(0, maxRows) : allRows;
 
-    // DuckDB returns BigInt for integer columns — JSON.stringify (used by
-    // VS Code postMessage) cannot serialize BigInt, so convert them here.
+    // Recursively convert all DuckDB value types to postMessage-safe primitives.
+    // DuckDB can return BigInt (integers), Date (timestamps), plain objects
+    // (structs), and arrays — none of which survive postMessage or display
+    // correctly via String() in the webview.
+    function serializeValue(v: unknown): unknown {
+      if (v === null || v === undefined) {
+        return null;
+      }
+      if (typeof v === "bigint") {
+        return v >= BigInt(Number.MIN_SAFE_INTEGER) &&
+          v <= BigInt(Number.MAX_SAFE_INTEGER)
+          ? Number(v)
+          : String(v);
+      }
+      if (v instanceof Date) {
+        return v.toISOString();
+      }
+      if (typeof v === "object") {
+        // DuckDB TIMESTAMP / TIMESTAMPTZ / TIME: { micros: bigint }
+        // micros = microseconds since Unix epoch
+        if (
+          "micros" in v &&
+          typeof (v as Record<string, unknown>).micros === "bigint"
+        ) {
+          const micros = (v as { micros: bigint }).micros;
+          return new Date(Number(micros / 1000n)).toISOString();
+        }
+        // DuckDB DATE: { days: number } — days since Unix epoch
+        if (
+          "days" in v &&
+          typeof (v as Record<string, unknown>).days === "number"
+        ) {
+          const days = (v as { days: number }).days;
+          return new Date(days * 86400000).toISOString().slice(0, 10);
+        }
+        // Structs, arrays, intervals, and other complex types — render as JSON.
+        try {
+          return JSON.stringify(v, (_k, val) =>
+            typeof val === "bigint" ? String(val) : val,
+          );
+        } catch {
+          return String(v);
+        }
+      }
+      return v;
+    }
+
     const sanitized = sliced.map((row) => {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(row)) {
-        if (typeof v === "bigint") {
-          out[k] =
-            v >= BigInt(Number.MIN_SAFE_INTEGER) &&
-            v <= BigInt(Number.MAX_SAFE_INTEGER)
-              ? Number(v)
-              : String(v);
-        } else {
-          out[k] = v;
-        }
+        out[k] = serializeValue(v);
       }
       return out;
     });
