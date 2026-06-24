@@ -71,6 +71,10 @@
       {
         "command": "fileSql.copyColumnName",
         "title": "Copy Column Name"
+      },
+      {
+        "command": "fileSql.openFileInSql",
+        "title": "Open with File SQL"
       }
     ],
     "viewsContainers": {
@@ -112,6 +116,13 @@
           "command": "fileSql.clearTables",
           "when": "view == fileSqlTables",
           "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "fileSql.openFileInSql",
+          "when": "resourceExtname == .csv || resourceExtname == .tsv || resourceExtname == .json || resourceExtname == .jsonl || resourceExtname == .ndjson || resourceExtname == .parquet || resourceExtname == .txt || resourceExtname == .log",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [

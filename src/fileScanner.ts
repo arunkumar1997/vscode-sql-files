@@ -27,9 +27,22 @@ export function deriveTableName(filePath: string): string {
   return sanitized || "table";
 }
 
+function sanitizeName(name: string): string {
+  const sanitized = name
+    .replace(/[^a-zA-Z0-9_]/g, "_")
+    .replace(/^([0-9])/, "_$1");
+  return sanitized || "table";
+}
+
 export function scanFolder(folderPath: string): TableEntry[] {
-  const entries: TableEntry[] = [];
-  const names = new Set<string>();
+  // Group files by their immediate parent directory.
+  // Each directory containing data files becomes one table (named after
+  // that directory). Multiple file-extension groups within one directory
+  // produce separate tables suffixed with the extension name.
+  const dirMap = new Map<
+    string,
+    Array<{ filePath: string; fileType: FileType; ext: string }>
+  >();
 
   function walk(dir: string): void {
     let items: string[];
@@ -54,24 +67,58 @@ export function scanFolder(folderPath: string): TableEntry[] {
       if (stat.isDirectory()) {
         walk(full);
       } else {
-        const fileType = detectFileType(full);
+        const ext = path.extname(full).toLowerCase();
+        const fileType = SUPPORTED_EXTENSIONS[ext] ?? null;
         if (!fileType) {
           continue;
         }
-        let name = deriveTableName(full);
-        // De-duplicate names
-        let suffix = 1;
-        const base = name;
-        while (names.has(name)) {
-          name = `${base}_${suffix++}`;
+        if (!dirMap.has(dir)) {
+          dirMap.set(dir, []);
         }
-        names.add(name);
-        entries.push({ name, filePath: full, fileType, isS3: false });
+        dirMap.get(dir)!.push({ filePath: full, fileType, ext });
       }
     }
   }
 
   walk(folderPath);
+
+  const entries: TableEntry[] = [];
+  const names = new Set<string>();
+
+  for (const [dir, files] of dirMap) {
+    // Group by (fileType, ext) so each distinct extension is one glob pattern.
+    const groups = new Map<string, { fileType: FileType; ext: string }>();
+    for (const { fileType, ext } of files) {
+      const key = `${fileType}:${ext}`;
+      if (!groups.has(key)) {
+        groups.set(key, { fileType, ext });
+      }
+    }
+
+    const dirName = path.basename(dir);
+    const isSingleGroup = groups.size === 1;
+
+    for (const { fileType, ext } of groups.values()) {
+      // Table name = directory name when all files share one type,
+      // or directory + extension suffix when there are multiple types.
+      const baseName = isSingleGroup
+        ? sanitizeName(dirName)
+        : sanitizeName(`${dirName}_${ext.slice(1)}`);
+
+      let name = baseName;
+      let suffix = 1;
+      while (names.has(name)) {
+        name = `${baseName}_${suffix++}`;
+      }
+      names.add(name);
+
+      // DuckDB's read_* functions natively support glob patterns, so passing
+      // "/path/to/dir/*.parquet" reads all matching files as one table.
+      const globPath = path.join(dir, `*${ext}`);
+      entries.push({ name, filePath: globPath, fileType, isS3: false });
+    }
+  }
+
   return entries;
 }
 

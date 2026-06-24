@@ -5,6 +5,7 @@ import { TableRegistry } from "./tableRegistry";
 import { TablesTreeProvider } from "./providers/tablesTreeProvider";
 import { addPath } from "./commands/addPath";
 import { addFolder } from "./commands/addFolder";
+import { entryFromLocalFile } from "./fileScanner";
 import { openQueryEditor } from "./commands/openQueryEditor";
 import { clearTables, removeTable, renameTable } from "./commands/clearTables";
 import { SqlCompletionProvider } from "./providers/completionProvider";
@@ -50,6 +51,16 @@ export async function activate(
     treeDataProvider: treeProvider,
     showCollapseAll: true,
   });
+
+  const EMPTY_MSG =
+    "No tables yet. Use the + or folder buttons above to load a CSV, JSON, or Parquet file.";
+
+  function refreshTreeMessage(): void {
+    treeView.message = registry!.getAll().length === 0 ? EMPTY_MSG : undefined;
+  }
+
+  refreshTreeMessage();
+  context.subscriptions.push(registry.onDidChange(() => refreshTreeMessage()));
 
   context.subscriptions.push(
     treeView,
@@ -102,6 +113,39 @@ export async function activate(
       [{ language: "sql" }, { language: "plaintext" }],
       new SqlCompletionProvider(registry),
       ".",
+    ),
+
+    vscode.commands.registerCommand(
+      "fileSql.openFileInSql",
+      async (uri: vscode.Uri) => {
+        const entry = entryFromLocalFile(uri.fsPath);
+        if (!entry) {
+          vscode.window.showErrorMessage(
+            `File SQL: Unsupported file type for ${uri.fsPath}`,
+          );
+          return;
+        }
+        try {
+          const cols = await engine!.registerTable(entry);
+          entry.columns = cols;
+          registry!.add(entry);
+          // Switch to the File SQL panel so the user sees the newly added table
+          await vscode.commands.executeCommand(
+            "workbench.view.extension.fileSqlExplorer",
+          );
+
+          // open query editor with the table name pre-filled
+          await vscode.commands.executeCommand("fileSql.openQueryEditor");
+
+          vscode.window.showInformationMessage(
+            `File SQL: Added table "${entry.name}".`,
+          );
+        } catch (err: unknown) {
+          vscode.window.showErrorMessage(
+            `File SQL: Failed to load — ${(err as Error).message}`,
+          );
+        }
+      },
     ),
   );
 }
