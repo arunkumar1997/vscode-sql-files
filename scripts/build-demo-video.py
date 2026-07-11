@@ -7,11 +7,11 @@ Same approach as scripts/build-og-image.py:
 
 Three chapters (chapter cards + animated scene each):
   1. Install once        ~10s  (VS Code Extensions Marketplace UI)
-  2. Right-click a file  ~8s   (cursor goes straight to 'Open with File SQL';
+  2. Right-click a file  ~5s   (cursor goes straight to 'Open with File SQL';
                                 the extension auto-registers the file — no
                                 dialog, no notification)
   3. Query with SQL      ~22s
-Total: ~40s at 60 fps => 2400 frames.
+Total: ~37s at 60 fps => 2220 frames.
 
 Fonts: JetBrains Mono only (matches OG image; keeps the script self-
 contained). Pillow is a dev-only tool — not added to the extension's
@@ -454,7 +454,10 @@ def scene_install(t: float) -> Image.Image:
                 width=1 if btn_border else 0,
             )
             d.text(
-                (btn_x0 + label_offset, btn_y0 + (btn_h - btn_label_font.size) // 2 + 1),
+                (
+                    btn_x0 + label_offset,
+                    btn_y0 + (btn_h - btn_label_font.size) // 2 + 1,
+                ),
                 btn_label,
                 font=btn_label_font,
                 fill=(255, 255, 255, fa),
@@ -567,19 +570,19 @@ def _easeout(x: float) -> float:
 
 
 def scene_rightclick(t: float) -> Image.Image:
-    """Scene 2 timeline (~8s):
-     0.0 - 1.5 s  cursor glides from the editor area to the file
-     1.5 - 2.0 s  file becomes selected (right-click)
-     2.0 s        context menu fades in next to the file
-     2.5 - 3.0 s  cursor moves *directly* to 'Open with File SQL' — no
-                  walking through unrelated items; this is a demo.
-     3.0 - 6.5 s  cursor rests on 'Open with File SQL' (amber highlight)
-     6.5 s        click ripple
-     6.8 - 8.0 s  menu vanishes and the cursor drifts away — the extension
-                  silently registers the file and opens the query editor
-                  (there is no confirmation notification). The crossfade
-                  into Scene 3 shows the resulting query editor with the
-                  sales table already loaded in the Tables sidebar.
+    """Scene 2 timeline (~5s):
+    0.0 - 1.2 s  cursor glides from the editor area to the file
+    1.2 - 1.5 s  file becomes selected (right-click)
+    1.5 s        context menu fades in next to the file
+    1.8 - 2.3 s  cursor moves *directly* to 'Open with File SQL' — no
+                 walking through unrelated items; this is a demo.
+    2.3 - 3.0 s  short, purposeful dwell on 'Open with File SQL'
+    3.0 s        click ripple
+    3.3 - 5.0 s  menu vanishes and the cursor drifts away — the extension
+                 silently registers the file and opens the query editor
+                 (there is no confirmation notification). The crossfade
+                 into Scene 3 shows the resulting query editor with the
+                 sales table already loaded in the Tables sidebar.
     """
     img = new_frame()
     d = ImageDraw.Draw(img, "RGBA")
@@ -631,7 +634,7 @@ def scene_rightclick(t: float) -> Image.Image:
     file_cursor_y = file_y + 4
 
     # ---- Selected state after cursor arrives ----
-    if t >= 1.5:
+    if t >= 1.2:
         d.rectangle(
             (sb_x0 + 32, file_y - 2, sb_x1 - 6, file_y + 18),
             fill=(255, 255, 255, 18),
@@ -639,9 +642,9 @@ def scene_rightclick(t: float) -> Image.Image:
         )
 
     # ---- Context menu ----
-    menu_shown_at = 2.0
-    click_t = 6.5
-    menu_gone_at = 6.8
+    menu_shown_at = 1.5
+    click_t = 3.0
+    menu_gone_at = 3.3
 
     if menu_shown_at <= t < menu_gone_at:
         mx0 = sb_x1 + 10
@@ -709,21 +712,21 @@ def scene_rightclick(t: float) -> Image.Image:
     open_x = mx0 + 60
     open_y = my0 + 8 + open_target_row * row_h + 6
 
-    if t < 1.5:
+    if t < 1.2:
         # Approach the file
-        p = _easeout(min(1.0, t / 1.5))
+        p = _easeout(min(1.0, t / 1.2))
         cx = int(start_x + (file_cursor_x - start_x) * p)
         cy = int(start_y + (file_cursor_y - start_y) * p)
-    elif t < 2.5:
+    elif t < 1.8:
         # Right-click; wait a beat with the menu appearing
         cx, cy = file_cursor_x, file_cursor_y
-    elif t < 3.0:
+    elif t < 2.3:
         # Move directly to 'Open with File SQL'
-        p = _easeout((t - 2.5) / 0.5)
+        p = _easeout((t - 1.8) / 0.5)
         cx = int(file_cursor_x + (open_x - file_cursor_x) * p)
         cy = int(file_cursor_y + (open_y - file_cursor_y) * p)
     elif t < menu_gone_at:
-        # Rest on the target
+        # Rest on the target (short, purposeful — no lag feel)
         cx, cy = open_x, open_y
     else:
         # Drift back toward the editor area after the click
@@ -827,15 +830,15 @@ def scene_query(t: float) -> Image.Image:
 
     # Columns list — appear one by one over 0..2s
     cols = [
-        ("Index",    "BIGINT"),
+        ("Index", "BIGINT"),
         ("Order Id", "VARCHAR"),
-        ("Date",     "DATE"),
-        ("Year",     "BIGINT"),
-        ("Region",   "VARCHAR"),
-        ("Country",  "VARCHAR"),
-        ("Product",  "VARCHAR"),
+        ("Date", "DATE"),
+        ("Year", "BIGINT"),
+        ("Region", "VARCHAR"),
+        ("Country", "VARCHAR"),
+        ("Product", "VARCHAR"),
         ("Quantity", "BIGINT"),
-        ("Revenue",  "DECIMAL"),
+        ("Revenue", "DECIMAL"),
     ]
     for i, (name, typ) in enumerate(cols):
         appear_at = 0.2 + i * 0.15
@@ -992,7 +995,7 @@ def scene_query(t: float) -> Image.Image:
 # Timeline
 # ---------------------------------------------------------------------------
 CH1_LEN = 10.0
-CH2_LEN = 8.0  # right-click → cursor goes straight to 'Open with File SQL'
+CH2_LEN = 5.0  # right-click → cursor goes straight to 'Open with File SQL'
 CH3_LEN = 22.0
 TOTAL = CH1_LEN + CH2_LEN + CH3_LEN
 

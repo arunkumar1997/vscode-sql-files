@@ -1,36 +1,34 @@
 /* ==========================================================================
    File SQL — landing page
-   Editor-themed, dark, mono-typography.
+   Editor-themed, mono-typography. Dark by default; supports [data-theme].
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
    1. Design tokens
+
+   Structural tokens (spacing, radii, fonts, motion, accent) live on :root
+   and are the same in both themes. Palette tokens live on
+   :root[data-theme='dark'] and :root[data-theme='light'] so the whole
+   site can be re-themed by flipping one attribute on <html>.
+
+   NOTE: The VS Code walkthrough mockups (.ui-window, .mockup) are always
+   dark — they represent VS Code's own Dark+ editor UI and would look
+   wrong re-coloured to light. Only the surrounding page chrome themes.
    -------------------------------------------------------------------------- */
 :root {
-  /* Palette — GitHub dark base */
-  --bg: #0d1117;
-  --bg-elev: #10151d;
-  --surface: #161b22;
-  --surface-2: #1c2129;
-  --border: #30363d;
-  --border-strong: #3b424b;
-
-  /* Text */
-  --text: #e6edf3;
-  --muted: #7d8590;
-  --muted-2: #99a1ac;
-
   /* Brand accent — sampled+adjusted from media/file-sql-icon.png (Milo).
-     Warm amber, distinct from DuckDB yellow. ~9.3:1 on --bg. */
+     Warm amber, distinct from DuckDB yellow. Same in both themes. */
   --accent: #ffb454;
   --accent-strong: #ffc06f;
   --accent-soft: rgba(255, 180, 84, 0.14);
   --accent-ring: rgba(255, 180, 84, 0.35);
+  /* Dark ink on amber — always the same because amber never changes. */
+  --btn-primary-ink: #14181d;
 
   /* DuckDB yellow — footer credit pill ONLY. Do not use elsewhere. */
   --duckdb: #fff000;
 
-  /* Syntax highlight colors for the mock code */
+  /* Syntax highlight colours for the mock code (mockups stay dark). */
   --syn-keyword: #ffb454;
   --syn-string: #a5e5a1;
   --syn-num: #79c0ff;
@@ -74,14 +72,69 @@
   /* Layout */
   --wrap-max: 1120px;
 
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Dark theme — the default. Also applied for [data-theme='dark']. */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Palette — GitHub dark base */
+  --bg: #0d1117;
+  --bg-elev: #10151d;
+  --surface: #161b22;
+  --surface-2: #1c2129;
+  --border: #30363d;
+  --border-strong: #3b424b;
+
+  /* Text */
+  --text: #e6edf3;
+  --muted: #7d8590;
+  --muted-2: #99a1ac;
+
+  /* Chrome surfaces that depend on theme */
+  --header-bg: rgba(13, 17, 23, 0.7);
+  --header-bg-stuck: rgba(13, 17, 23, 0.88);
+  --grid-line: rgba(230, 237, 243, 0.025);
+  --copy-btn-hover-bg: #232932;
+  --footer-shade: rgba(0, 0, 0, 0.3);
+  --snippet-bg: #0b0f15;
+
   /* Shadows */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-mockup: 0 30px 80px -20px rgba(0, 0, 0, 0.7),
     0 0 0 1px var(--border);
+}
 
-  /* Motion */
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+/* Light theme — GitHub-light-inspired palette. Chrome only; mockups stay dark. */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --bg-elev: #f6f8fa;
+  --surface: #f6f8fa;
+  --surface-2: #eaeef2;
+  --border: #d0d7de;
+  --border-strong: #afb8c1;
+
+  --text: #1f2328;
+  --muted: #59636e;
+  --muted-2: #656d76;
+
+  --header-bg: rgba(255, 255, 255, 0.78);
+  --header-bg-stuck: rgba(255, 255, 255, 0.92);
+  --grid-line: rgba(15, 20, 25, 0.05);
+  --copy-btn-hover-bg: #eaeef2;
+  --footer-shade: rgba(15, 20, 25, 0.04);
+  --snippet-bg: #eef1f5;
+
+  --shadow-1: 0 1px 2px rgba(15, 20, 25, 0.06);
+  --shadow-2: 0 8px 24px rgba(15, 20, 25, 0.08);
+  --shadow-mockup: 0 30px 80px -20px rgba(15, 20, 25, 0.2),
+    0 0 0 1px var(--border);
 }
 
 /* --------------------------------------------------------------------------
@@ -110,14 +163,15 @@ body {
   background-color: var(--bg);
   /* Subtle graph-paper pattern — CSS only, no image */
   background-image:
-    linear-gradient(to right, rgba(230, 237, 243, 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(230, 237, 243, 0.025) 1px, transparent 1px),
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px),
     radial-gradient(
       ellipse 60% 40% at 50% 0%,
       rgba(255, 180, 84, 0.08),
       transparent 70%
     );
   background-size: 32px 32px, 32px 32px, 100% 100%;
+  transition: background-color 200ms var(--ease), color 200ms var(--ease);
   background-position: -1px -1px, -1px -1px, 0 0;
   background-attachment: fixed;
   color: var(--text);
@@ -254,7 +308,7 @@ pre {
   position: sticky;
   top: 0;
   z-index: 40;
-  background: rgba(13, 17, 23, 0.7);
+  background: var(--header-bg);
   backdrop-filter: saturate(150%) blur(10px);
   -webkit-backdrop-filter: saturate(150%) blur(10px);
   border-bottom: 1px solid transparent;
@@ -262,7 +316,7 @@ pre {
 }
 .site-header.is-stuck {
   border-bottom-color: var(--border);
-  background: rgba(13, 17, 23, 0.88);
+  background: var(--header-bg-stuck);
 }
 
 .header-wrap {
@@ -315,6 +369,51 @@ pre {
   .site-nav a:not(.btn) {
     display: none;
   }
+}
+
+/* Theme toggle — round icon button in the header. Sun/moon swap via CSS
+   based on the [data-theme] attribute on <html>. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--muted-2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: color 150ms var(--ease), background 150ms var(--ease),
+    border-color 150ms var(--ease);
+}
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border-strong);
+  outline: none;
+}
+.theme-toggle svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+/* Dark theme shows the sun (click to go light); light shows the moon. */
+:root[data-theme='dark'] .theme-toggle .icon-moon,
+:root:not([data-theme='light']) .theme-toggle .icon-moon { display: none; }
+:root[data-theme='dark'] .theme-toggle .icon-sun,
+:root:not([data-theme='light']) .theme-toggle .icon-sun { display: block; }
+:root[data-theme='light'] .theme-toggle .icon-sun { display: none; }
+:root[data-theme='light'] .theme-toggle .icon-moon { display: block; }
+
+@media (max-width: 640px) {
+  .theme-toggle { width: 32px; height: 32px; }
+  .theme-toggle svg { width: 16px; height: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle { transition: none; }
 }
 
 /* --------------------------------------------------------------------------
@@ -735,6 +834,86 @@ pre {
   background: var(--bg);
 }
 
+/* Play-button overlay — video does NOT autoplay; user clicks to play. */
+.video-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: radial-gradient(
+      ellipse at center,
+      rgba(13, 17, 23, 0.15) 0%,
+      rgba(13, 17, 23, 0.55) 60%,
+      rgba(13, 17, 23, 0.75) 100%
+    );
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 200ms var(--ease), opacity 250ms var(--ease);
+  z-index: 2;
+}
+.video-play:hover,
+.video-play:focus-visible {
+  background: radial-gradient(
+      ellipse at center,
+      rgba(13, 17, 23, 0.05) 0%,
+      rgba(13, 17, 23, 0.45) 60%,
+      rgba(13, 17, 23, 0.7) 100%
+    );
+  outline: none;
+}
+.video-play-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #14181e;
+  box-shadow:
+    0 12px 30px -8px rgba(0, 0, 0, 0.65),
+    0 0 0 6px rgba(255, 180, 84, 0.18),
+    0 0 0 14px rgba(255, 180, 84, 0.08);
+  transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+}
+.video-play-circle svg {
+  /* nudge the play triangle so it looks optically centred */
+  transform: translateX(3px);
+}
+.video-play:hover .video-play-circle,
+.video-play:focus-visible .video-play-circle {
+  transform: scale(1.06);
+  box-shadow:
+    0 16px 36px -8px rgba(0, 0, 0, 0.7),
+    0 0 0 6px rgba(255, 180, 84, 0.28),
+    0 0 0 16px rgba(255, 180, 84, 0.12);
+}
+.video-play-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.video-frame.is-playing .video-play {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-play,
+  .video-play-circle { transition: none; }
+  .video-play:hover .video-play-circle,
+  .video-play:focus-visible .video-play-circle { transform: none; }
+}
+
 /* --------------------------------------------------------------------------
    9. Formats grid
    -------------------------------------------------------------------------- */
@@ -899,7 +1078,7 @@ pre {
   flex: 1;
 }
 .snippet {
-  background: #0b0f15;
+  background: var(--snippet-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
@@ -1203,8 +1382,11 @@ pre {
   font-size: 12px;
 }
 .qp-option.is-selected {
-  background: #094771;                 /* VS Code selection blue */
-  color: #ffffff;
+  /* Amber to match the context-menu 'Open with File SQL' highlight in
+     Mockup 1 — both mockups tell the same story: "this is the action". */
+  background: var(--accent);
+  color: #14181d;
+  font-weight: 600;
 }
 .qp-icon {
   display: inline-flex;
@@ -1212,7 +1394,7 @@ pre {
   justify-content: center;
   color: #cccccc;
 }
-.qp-option.is-selected .qp-icon { color: #ffffff; }
+.qp-option.is-selected .qp-icon { color: #14181d; }
 .qp-title { font-weight: 500; }
 .qp-desc {
   color: #8a929a;
@@ -1221,7 +1403,7 @@ pre {
   justify-self: end;
   text-align: right;
 }
-.qp-option.is-selected .qp-desc { color: rgba(255, 255, 255, 0.75); }
+.qp-option.is-selected .qp-desc { color: rgba(20, 24, 29, 0.7); }
 
 @media (max-width: 460px) {
   .qp-option { grid-template-columns: 20px 1fr; }
@@ -1476,6 +1658,243 @@ pre {
 }
 
 /* --------------------------------------------------------------------------
+   11c. Walkthrough mockups — LIGHT THEME palette
+
+   Same VS-Code-inspired UI, re-coloured to the VS Code Light+ palette.
+   Only applies inside the walkthrough grid (.walk-grid …). The HERO mockup
+   (.mockup) is intentionally NOT re-themed and stays dark — think of it
+   as a code screenshot embedded in the page.
+
+   Note: We keep the amber highlight for 'Open with File SQL' and the green
+   Run button + parquet file-icon gradient as-is; those are brand/status
+   colours and read fine on both light and dark.
+   -------------------------------------------------------------------------- */
+:root[data-theme='light'] .walk-grid .ui-window {
+  color: #3b3b3b;
+  box-shadow: 0 24px 60px -24px rgba(15, 20, 25, 0.18),
+    0 0 0 1px rgba(255, 180, 84, 0.08);
+}
+:root[data-theme='light'] .walk-grid .ui-window::after {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 180, 84, 0.32),
+    rgba(255, 180, 84, 0) 40%,
+    rgba(255, 180, 84, 0) 60%,
+    rgba(9, 105, 218, 0.18)
+  );
+}
+
+/* Window chrome — titlebar and menubar */
+:root[data-theme='light'] .walk-grid .ui-titlebar {
+  background: #e5e5e5;
+  border-bottom-color: #d0d0d0;
+}
+:root[data-theme='light'] .walk-grid .ui-title { color: #424242; }
+:root[data-theme='light'] .walk-grid .ui-menubar { color: #3b3b3b; }
+
+/* Editor body + activity bar + sidebar (Light Modern-ish) */
+:root[data-theme='light'] .walk-grid .ui-body { background: #ffffff; }
+:root[data-theme='light'] .walk-grid .ui-activity {
+  background: #f3f3f3;
+  border-right-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .ab-icon {
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55))
+      no-repeat center / 14px 2px,
+    linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55))
+      no-repeat center / 14px 2px;
+  background-position: center 7px, center 13px;
+  opacity: 0.6;
+}
+:root[data-theme='light'] .walk-grid .ab-active { opacity: 1; }
+
+/* Mockup 1: Explorer + right-click context menu */
+:root[data-theme='light'] .walk-grid .ui-explorer { background: #f3f3f3; }
+:root[data-theme='light'] .walk-grid .ui-panel-header { color: #616161; }
+:root[data-theme='light'] .walk-grid .ui-folder,
+:root[data-theme='light'] .walk-grid .ui-file { color: #3b3b3b; }
+:root[data-theme='light'] .walk-grid .ui-folder .chev { color: #616161; }
+:root[data-theme='light'] .walk-grid .ui-file.selected {
+  background: rgba(0, 0, 0, 0.06);
+  outline-color: rgba(0, 0, 0, 0.12);
+}
+:root[data-theme='light'] .walk-grid .ui-context {
+  background: #ffffff;
+  border-color: #c8c8c8;
+  box-shadow: 0 8px 24px rgba(15, 20, 25, 0.18);
+}
+:root[data-theme='light'] .walk-grid .ctx-item { color: #3b3b3b; }
+:root[data-theme='light'] .walk-grid .ctx-kbd { color: #616161; }
+:root[data-theme='light'] .walk-grid .ctx-sep { background: #e5e5e5; }
+/* .ctx-item.is-hover keeps its amber highlight — already reads on both themes */
+
+/* Mockup 2: Quick Pick */
+:root[data-theme='light'] .walk-grid .qp {
+  background: #ffffff;
+  border-color: #c8c8c8;
+  box-shadow: 0 12px 30px rgba(15, 20, 25, 0.18);
+}
+:root[data-theme='light'] .walk-grid .qp-input {
+  background: #ffffff;
+  border-bottom-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .qp-placeholder { color: #6e6e6e; }
+:root[data-theme='light'] .walk-grid .qp-caret { background: #3b3b3b; }
+:root[data-theme='light'] .walk-grid .qp-option { color: #3b3b3b; }
+/* .qp-option.is-selected keeps its amber highlight — reads on both themes
+   and matches the context-menu highlight in Mockup 1. */
+:root[data-theme='light'] .walk-grid .qp-icon { color: #3b3b3b; }
+:root[data-theme='light'] .walk-grid .qp-desc { color: #616161; }
+
+/* Mockup 3: Query Editor — tables sidebar */
+:root[data-theme='light'] .walk-grid .ui-tables {
+  background: #f3f3f3;
+  border-right-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .ui-tables .ui-panel-header { color: #3b3b3b; }
+:root[data-theme='light'] .walk-grid .panel-actions { color: #616161; }
+:root[data-theme='light'] .walk-grid .tbl-item { color: #3b3b3b; }
+:root[data-theme='light'] .walk-grid .tbl-item .chev { color: #616161; }
+:root[data-theme='light'] .walk-grid .tbl-name { color: #1a1a1a; }
+:root[data-theme='light'] .walk-grid .tbl-badge,
+:root[data-theme='light'] .walk-grid .tbl-close,
+:root[data-theme='light'] .walk-grid .col-type { color: #616161; }
+:root[data-theme='light'] .walk-grid .tbl-cols li { color: #3b3b3b; }
+
+/* Mockup 3: Query Editor — editor pane, tabs, toolbar */
+:root[data-theme='light'] .walk-grid .ui-editor { background: #ffffff; }
+:root[data-theme='light'] .walk-grid .ui-editor-tabs {
+  background: #ececec;
+  border-bottom-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .ui-editor-tabs .tab {
+  color: #616161;
+  border-right-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .ui-editor-tabs .tab-active {
+  background: #ffffff;
+  color: #1a1a1a;
+}
+:root[data-theme='light'] .walk-grid .ui-editor-tabs .tab-close { color: #616161; }
+:root[data-theme='light'] .walk-grid .ui-editor-toolbar {
+  background: #f3f3f3;
+  border-bottom-color: #e5e5e5;
+  color: #616161;
+}
+:root[data-theme='light'] .walk-grid .tb-meta { color: #616161; }
+:root[data-theme='light'] .walk-grid .tb-warn { color: #996f16; }
+
+/* Mockup 3: Query Editor — code and syntax (VS Code Light+ palette,
+   scoped to the walkthrough editor mockup only so the hero stays dark) */
+:root[data-theme='light'] .walk-grid .ui-code {
+  background: #ffffff;
+  color: #24292f;
+  border-bottom-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .ui-code .ln { color: #a0a0a0; }
+:root[data-theme='light'] .walk-grid .ui-code .tok-keyword { color: #0000ff; }
+:root[data-theme='light'] .walk-grid .ui-code .tok-string  { color: #a31515; }
+:root[data-theme='light'] .walk-grid .ui-code .tok-num     { color: #098658; }
+:root[data-theme='light'] .walk-grid .ui-code .tok-fn      { color: #795e26; }
+:root[data-theme='light'] .walk-grid .ui-code .tok-comment { color: #008000; }
+:root[data-theme='light'] .walk-grid .ui-code .tok-op      { color: #1a1a1a; }
+
+/* Mockup 3: Query Editor — results grid */
+:root[data-theme='light'] .walk-grid .ui-results-wrap {
+  background: #ffffff;
+  border-top-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .ui-results { color: #3b3b3b; }
+:root[data-theme='light'] .walk-grid .ui-results th,
+:root[data-theme='light'] .walk-grid .ui-results td {
+  border-bottom-color: #e5e5e5;
+  border-right-color: #e5e5e5;
+}
+:root[data-theme='light'] .walk-grid .ui-results th {
+  background: #ececec;
+  color: #1a1a1a;
+}
+:root[data-theme='light'] .walk-grid .ui-results .c-idx {
+  color: #6e6e6e;
+  background: rgba(0, 0, 0, 0.04);
+}
+:root[data-theme='light'] .walk-grid .ui-results tbody tr:hover td {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* --------------------------------------------------------------------------
+   7b. HERO mockup — LIGHT THEME palette
+
+   Same VS Code Light+ treatment as the walkthrough (11c). Kept in a
+   separate block because the hero mockup uses .mockup / .mockup-*
+   selectors (not .ui-*). The rest of the .mockup rules already use
+   themed tokens (--surface, --border, --text, --muted, --accent), so
+   only the hardcoded dark colours need per-theme overrides here.
+   -------------------------------------------------------------------------- */
+:root[data-theme='light'] .mockup { color: #3b3b3b; }
+:root[data-theme='light'] .mockup::after {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 180, 84, 0.32),
+    rgba(255, 180, 84, 0) 40%,
+    rgba(255, 180, 84, 0) 60%,
+    rgba(9, 105, 218, 0.18)
+  );
+}
+
+/* Titlebar & tabs */
+:root[data-theme='light'] .mockup-titlebar { background: #e5e5e5; }
+:root[data-theme='light'] .mockup-title { color: #424242; }
+:root[data-theme='light'] .mockup-tabs { background: #ececec; }
+:root[data-theme='light'] .mockup-tabs .tab { color: #616161; }
+:root[data-theme='light'] .mockup-tabs .tab-active {
+  background: #ffffff;
+  color: #1a1a1a;
+}
+:root[data-theme='light'] .mockup-tabs .tab-close { color: #616161; }
+
+/* Editor pane */
+:root[data-theme='light'] .mockup-editor { background: #ffffff; }
+:root[data-theme='light'] .mockup .gutter { color: #a0a0a0; }
+:root[data-theme='light'] .mockup .code { color: #24292f; }
+
+/* SQL syntax — Light+ palette, scoped to the hero mockup only */
+:root[data-theme='light'] .mockup .tok-keyword { color: #0000ff; }
+:root[data-theme='light'] .mockup .tok-string  { color: #a31515; }
+:root[data-theme='light'] .mockup .tok-num     { color: #098658; }
+:root[data-theme='light'] .mockup .tok-fn      { color: #795e26; }
+:root[data-theme='light'] .mockup .tok-comment { color: #008000; }
+:root[data-theme='light'] .mockup .tok-op      { color: #1a1a1a; }
+:root[data-theme='light'] .code.typewriter-active #typewriter::after {
+  background: #0000ff;
+}
+
+/* Toolbar (Run button stays green — status colour reads on both themes) */
+:root[data-theme='light'] .mockup-toolbar {
+  background: #f3f3f3;
+  color: #616161;
+}
+:root[data-theme='light'] .mockup-toolbar .tb-meta { color: #616161; }
+
+/* Results grid */
+:root[data-theme='light'] .mockup-results-wrap { background: #ffffff; }
+:root[data-theme='light'] .mockup .ui-results { color: #3b3b3b; }
+:root[data-theme='light'] .mockup .ui-results th {
+  background: #ececec;
+  color: #1a1a1a;
+}
+:root[data-theme='light'] .mockup .ui-results td {
+  border-bottom: 1px solid #e5e5e5;
+  border-right: 1px solid #e5e5e5;
+}
+:root[data-theme='light'] .mockup .ui-results .c-idx {
+  color: #6e6e6e;
+  background: rgba(0, 0, 0, 0.04);
+}
+:root[data-theme='light'] .mockup .ui-results .c-num { color: #098658; }
+
+/* --------------------------------------------------------------------------
    12. Install CTA
    -------------------------------------------------------------------------- */
 .install-cta {
@@ -1558,9 +1977,9 @@ pre {
   cursor: pointer;
   transition: background 120ms var(--ease), color 120ms var(--ease);
 }
-.copy-btn:hover { background: #232932; }
+.copy-btn:hover { background: var(--copy-btn-hover-bg); }
 .copy-btn .check-icon { display: none; }
-.copy-btn.is-copied { color: #14181d; background: var(--accent); }
+.copy-btn.is-copied { color: var(--btn-primary-ink); background: var(--accent); }
 .copy-btn.is-copied .copy-icon { display: none; }
 .copy-btn.is-copied .check-icon { display: inline-block; }
 
@@ -1577,7 +1996,7 @@ pre {
   border-top: 1px solid var(--border);
   padding: var(--sp-7) 0 var(--sp-6);
   margin-top: var(--sp-6);
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.3));
+  background: linear-gradient(180deg, transparent, var(--footer-shade));
 }
 .footer-wrap {
   display: grid;
@@ -1644,6 +2063,17 @@ pre {
   border-radius: 50%;
   background: var(--duckdb);
   box-shadow: 0 0 6px rgba(255, 240, 0, 0.6);
+}
+
+/* Light theme: pure yellow text on white is unreadable — use a deep amber
+   for the label but keep the yellow dot as a brand visual signal. */
+:root[data-theme='light'] .duckdb-pill {
+  color: #7a5b00;
+  background: rgba(255, 240, 0, 0.16);
+  border-color: rgba(190, 150, 0, 0.45);
+}
+:root[data-theme='light'] .duckdb-dot {
+  box-shadow: 0 0 6px rgba(190, 150, 0, 0.7);
 }
 
 /* --------------------------------------------------------------------------
