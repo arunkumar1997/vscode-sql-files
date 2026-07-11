@@ -5,7 +5,9 @@
 [![TypeScript](https://img.shields.io/badge/Built%20with-TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 
-**File SQL** turns your local and Amazon S3 files into queryable SQL tables — right inside VS Code. Load CSV, JSON, Parquet, or plain-text files, and run SQL queries against them instantly using [DuckDB](https://duckdb.org)'s high-performance analytics engine. No databases, no ETL pipelines, no setup.
+> 🌐 **Landing page:** [arunkumar1997.github.io/vscode-sql-files](https://arunkumar1997.github.io/vscode-sql-files/) &middot; [Install on the Marketplace](https://marketplace.visualstudio.com/items?itemName=arunkumar1997.file-sql)
+
+**File SQL** turns your local and Amazon S3 files into queryable SQL tables — right inside VS Code. Load CSV, JSON, Parquet, or plain-text files, and run SQL queries against them instantly using [DuckDB](https://duckdb.org)'s high-performance analytics engine. No databases, no ETL pipelines, no setup. Load CSV, JSON, Parquet, or plain-text files, and run SQL queries against them instantly using [DuckDB](https://duckdb.org)'s high-performance analytics engine. No databases, no ETL pipelines, no setup.
 
 ![File SQL Query Editor Screenshot](media/sample.png)
 
