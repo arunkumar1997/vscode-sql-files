@@ -3,13 +3,481 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>File SQL — landing page (placeholder)</title>
-    <meta name="description" content="Query files with SQL, inside VS Code." />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0d1117" />
+
+    <title>File SQL — Query files with SQL, inside VS Code</title>
+    <meta
+      name="description"
+      content="Right-click a CSV, JSON, Parquet, or S3 file — get a queryable SQL table. 100% local, powered by DuckDB."
+    />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://arunkumar1997.github.io/vscode-sql-files/" />
+    <meta property="og:title" content="File SQL — Query files with SQL, inside VS Code" />
+    <meta
+      property="og:description"
+      content="Right-click a CSV, JSON, Parquet, or S3 file — get a queryable SQL table. 100% local, powered by DuckDB."
+    />
+    <meta property="og:image" content="https://arunkumar1997.github.io/vscode-sql-files/assets/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="File SQL — SQL for your files, inside VS Code." />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="File SQL — Query files with SQL, inside VS Code" />
+    <meta
+      name="twitter:description"
+      content="Right-click a CSV, JSON, Parquet, or S3 file — get a queryable SQL table. 100% local, powered by DuckDB."
+    />
+    <meta name="twitter:image" content="https://arunkumar1997.github.io/vscode-sql-files/assets/og-image.png" />
+
+    <!-- Icons -->
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="assets/favicon.ico" />
+    <link rel="apple-touch-icon" href="assets/favicon.svg" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    />
+
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="canonical" href="https://arunkumar1997.github.io/vscode-sql-files/" />
   </head>
   <body>
-    <main>
-      <h1>Hello, File SQL</h1>
-      <p>Landing page under construction.</p>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header" role="banner">
+      <div class="wrap header-wrap">
+        <a class="brand" href="./" aria-label="File SQL — home">
+          <svg
+            class="brand-mark"
+            width="28"
+            height="28"
+            viewBox="0 0 32 32"
+            fill="none"
+            aria-hidden="true"
+          >
+            <rect x="4" y="3" width="20" height="26" rx="3" fill="#1c2129" stroke="#30363d" />
+            <path d="M24 3l4 4h-4z" fill="#FFB454" />
+            <path d="M8 10h10M8 14h8M8 18h6" stroke="#7ee787" stroke-width="1.6" stroke-linecap="round" />
+            <rect x="6" y="22" width="12" height="6" rx="2" fill="#FFF000" />
+            <text
+              x="12"
+              y="26.6"
+              text-anchor="middle"
+              font-family="JetBrains Mono, monospace"
+              font-size="4.5"
+              font-weight="700"
+              fill="#0d1117"
+            >SQL</text>
+          </svg>
+          <span class="brand-name">File SQL</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="https://github.com/arunkumar1997/vscode-sql-files" rel="noopener">GitHub</a>
+          <a
+            class="btn btn-ghost btn-sm"
+            href="https://marketplace.visualstudio.com/items?itemName=arunkumar1997.file-sql"
+            rel="noopener"
+            >Install</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ================= HERO ================= -->
+      <section class="hero">
+        <div class="wrap hero-wrap">
+          <div class="hero-copy">
+            <p class="eyebrow">
+              <span class="dot" aria-hidden="true"></span> VS Code extension &middot; v1.1
+            </p>
+            <h1 class="headline">
+              SQL for your files.<br />
+              <span class="accent">Inside VS Code.</span>
+            </h1>
+            <p class="subhead">
+              Right-click a CSV, JSON, Parquet, or S3 file — get a queryable SQL
+              table. Powered by DuckDB. 100% local.
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="https://marketplace.visualstudio.com/items?itemName=arunkumar1997.file-sql"
+                rel="noopener"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+                  <path d="M17.86 3.1 21 4.66v14.68l-3.14 1.56-8.9-8.4L4.6 16.2 2 14.9V9.1l2.6-1.3 4.36 3.7 8.9-8.4Zm.44 4.05L11.9 12l6.4 4.85V7.15Z" />
+                </svg>
+                Install for VS Code
+              </a>
+              <a
+                class="btn btn-secondary"
+                href="https://github.com/arunkumar1997/vscode-sql-files"
+                rel="noopener"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+                  <path fill-rule="evenodd" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.9.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.56 9.56 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" clip-rule="evenodd" />
+                </svg>
+                View on GitHub
+              </a>
+            </div>
+            <p class="hero-meta">
+              <span>Free · MIT</span>
+              <span aria-hidden="true">·</span>
+              <span>No account · No telemetry</span>
+              <span aria-hidden="true">·</span>
+              <span>Windows · macOS · Linux</span>
+            </p>
+          </div>
+
+          <!-- Fake VS Code window mockup (pure CSS/HTML, no image) -->
+          <div
+            class="mockup"
+            role="img"
+            aria-label="A VS Code window showing a SQL query against sales.parquet with a results grid below."
+          >
+            <div class="mockup-titlebar">
+              <span class="lights" aria-hidden="true">
+                <i class="light light-red"></i>
+                <i class="light light-yellow"></i>
+                <i class="light light-green"></i>
+              </span>
+              <span class="mockup-title">File SQL — sales.parquet</span>
+            </div>
+            <div class="mockup-tabs" aria-hidden="true">
+              <div class="tab tab-active">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="1.5" width="10" height="13" rx="1.5" fill="#1c2129" stroke="#30363d" />
+                  <path d="M12 1.5l2 2h-2z" fill="#FFB454" />
+                  <path d="M4 6h6M4 8.5h5M4 11h4" stroke="#7ee787" stroke-width="1" stroke-linecap="round" />
+                </svg>
+                <span>sales.parquet</span>
+                <span class="tab-close" aria-hidden="true">×</span>
+              </div>
+              <div class="tab-spacer"></div>
+            </div>
+            <div class="mockup-editor" aria-hidden="true">
+              <div class="gutter">
+                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+              </div>
+              <pre class="code"><code id="typewriter"><span class="tok-comment">-- 2.3M rows · queried in 41 ms</span>
+<span class="tok-keyword">SELECT</span> region, <span class="tok-fn">SUM</span>(revenue) <span class="tok-keyword">AS</span> total
+<span class="tok-keyword">FROM</span> <span class="tok-string">'sales.parquet'</span>
+<span class="tok-keyword">WHERE</span> year <span class="tok-op">=</span> <span class="tok-num">2026</span>
+<span class="tok-keyword">GROUP BY</span> region
+<span class="tok-keyword">ORDER BY</span> total <span class="tok-keyword">DESC</span>;</code></pre>
+            </div>
+            <div class="mockup-results" aria-hidden="true">
+              <div class="results-head">
+                <span class="results-title">Results</span>
+                <span class="results-meta">4 rows · 41&nbsp;ms</span>
+              </div>
+              <table class="results-table">
+                <thead>
+                  <tr><th>region</th><th class="num">total</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>APAC</td><td class="num">$4,821,940</td></tr>
+                  <tr><td>EMEA</td><td class="num">$3,214,022</td></tr>
+                  <tr><td>Americas</td><td class="num">$2,987,113</td></tr>
+                  <tr><td>LATAM</td><td class="num">$1,102,584</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= DEMO PLACEHOLDER ================= -->
+      <!-- REPLACE: swap for <video src="assets/demo.mp4" controls poster="assets/demo-poster.png"></video> when CEO delivers the recording -->
+      <section class="section demo" aria-labelledby="demo-title">
+        <div class="wrap">
+          <h2 id="demo-title" class="section-title">See it in 60 seconds</h2>
+          <div class="video-frame" role="img" aria-label="Demo video coming soon">
+            <div class="video-inner">
+              <div class="play-badge" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+              <p class="video-caption">Demo video coming soon</p>
+              <p class="video-sub">A 60-second walkthrough is on the way.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= FORMATS ================= -->
+      <section class="section formats" aria-labelledby="formats-title">
+        <div class="wrap">
+          <h2 id="formats-title" class="section-title">Query any file</h2>
+          <p class="section-lede">One extension, every format your team keeps sending you.</p>
+          <ul class="format-grid" role="list">
+            <li class="format-card">
+              <span class="format-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="5" width="16" height="14" rx="1" />
+                  <path d="M10 5v14M16 5v14M4 12h16" />
+                </svg>
+              </span>
+              <h3 class="format-name">CSV</h3>
+              <p class="format-desc">Auto-detected delimiters, headers, and types.</p>
+            </li>
+            <li class="format-card">
+              <span class="format-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 3H6a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2" />
+                  <path d="M16 3h2a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2" />
+                </svg>
+              </span>
+              <h3 class="format-name">JSON</h3>
+              <p class="format-desc">Nested objects, arrays, and mixed schemas.</p>
+            </li>
+            <li class="format-card">
+              <span class="format-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                  <path d="M14 3v6h6" />
+                  <path d="M8 14h8M8 17h5" />
+                </svg>
+              </span>
+              <h3 class="format-name">Parquet</h3>
+              <p class="format-desc">Columnar reads — millions of rows, milliseconds.</p>
+            </li>
+            <li class="format-card">
+              <span class="format-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="5" width="16" height="14" rx="1" />
+                  <path d="M12 5v14M4 12h16" stroke-dasharray="2 2" />
+                </svg>
+              </span>
+              <h3 class="format-name">TSV</h3>
+              <p class="format-desc">Tab-separated files, no config required.</p>
+            </li>
+            <li class="format-card">
+              <span class="format-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="5" width="16" height="3" rx="1" />
+                  <rect x="4" y="10.5" width="16" height="3" rx="1" />
+                  <rect x="4" y="16" width="16" height="3" rx="1" />
+                </svg>
+              </span>
+              <h3 class="format-name">JSONL / NDJSON</h3>
+              <p class="format-desc">Streamed logs and events, one row per line.</p>
+            </li>
+            <li class="format-card">
+              <span class="format-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="6" rx="8" ry="3" />
+                  <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" />
+                  <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
+                </svg>
+              </span>
+              <h3 class="format-name">S3</h3>
+              <p class="format-desc">Point at a bucket or prefix — auto-detected region.</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================= FEATURES ================= -->
+      <section id="features" class="section features" aria-labelledby="features-title">
+        <div class="wrap">
+          <h2 id="features-title" class="section-title">Three things you'll love</h2>
+          <div class="feature-grid">
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <path d="M8 14h8M8 17h5" />
+                </svg>
+              </div>
+              <h3 class="feature-title">Folder = Table.</h3>
+              <p class="feature-desc">
+                Point at a folder or S3 prefix. Each subfolder becomes its own
+                table automatically — no schemas, no config.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="6" rx="8" ry="3" />
+                  <path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6" />
+                  <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
+                </svg>
+              </div>
+              <h3 class="feature-title">S3-native.</h3>
+              <p class="feature-desc">
+                Auto-detected regions, AWS profile support, files streamed to a
+                local temp dir. Your bucket, your credentials, your control.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                  <path d="M8 12l3 3 5-6" />
+                </svg>
+              </div>
+              <h3 class="feature-title">100% local.</h3>
+              <p class="feature-desc">
+                No accounts, no cloud, no telemetry. Your data never leaves your
+                machine — the extension talks only to DuckDB and your files.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= HOW IT WORKS ================= -->
+      <section id="how" class="section how" aria-labelledby="how-title">
+        <div class="wrap">
+          <h2 id="how-title" class="section-title">How it works</h2>
+          <ol class="steps" role="list">
+            <li class="step">
+              <span class="step-num" aria-hidden="true">01</span>
+              <h3 class="step-title">Install</h3>
+              <p class="step-desc">
+                One command in your terminal, or one click in the Marketplace.
+              </p>
+              <pre class="snippet"><code><span class="tok-muted">$</span> code --install-extension arunkumar1997.file-sql</code></pre>
+            </li>
+            <li class="step">
+              <span class="step-num" aria-hidden="true">02</span>
+              <h3 class="step-title">Load a file</h3>
+              <p class="step-desc">
+                Right-click any file in Explorer &rarr; <em>Open with File SQL</em>.
+              </p>
+              <pre class="snippet"><code><span class="tok-muted">Explorer &rarr;</span> right-click <span class="tok-string">'sales.parquet'</span> &rarr; <span class="tok-keyword">Open with File SQL</span></code></pre>
+            </li>
+            <li class="step">
+              <span class="step-num" aria-hidden="true">03</span>
+              <h3 class="step-title">Query</h3>
+              <p class="step-desc">
+                Write SQL, press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>. Results in the panel below.
+              </p>
+              <pre class="snippet"><code><span class="tok-keyword">SELECT</span> * <span class="tok-keyword">FROM</span> sales <span class="tok-keyword">LIMIT</span> <span class="tok-num">10</span>;</code></pre>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ================= INSTALL CTA ================= -->
+      <section class="section install-cta" aria-labelledby="install-title">
+        <div class="wrap install-wrap">
+          <h2 id="install-title" class="section-title">Ready to query your files?</h2>
+          <p class="section-lede">Free, MIT-licensed, no account required.</p>
+          <a
+            class="btn btn-primary btn-lg"
+            href="https://marketplace.visualstudio.com/items?itemName=arunkumar1997.file-sql"
+            rel="noopener"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+              <path d="M17.86 3.1 21 4.66v14.68l-3.14 1.56-8.9-8.4L4.6 16.2 2 14.9V9.1l2.6-1.3 4.36 3.7 8.9-8.4Zm.44 4.05L11.9 12l6.4 4.85V7.15Z" />
+            </svg>
+            Install File SQL
+          </a>
+
+          <div class="copy-row" data-copy>
+            <label class="copy-label" for="copy-input">
+              Or paste in VS Code Quick Open (<kbd>Ctrl</kbd>+<kbd>P</kbd>):
+            </label>
+            <div class="copy-field">
+              <input
+                id="copy-input"
+                class="copy-input"
+                type="text"
+                readonly
+                value="ext install arunkumar1997.file-sql"
+                aria-label="Install command"
+              />
+              <button
+                type="button"
+                class="copy-btn"
+                data-copy-btn
+                aria-label="Copy install command"
+              >
+                <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                  <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                </svg>
+                <svg class="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12l5 5L20 7" />
+                </svg>
+                <span class="copy-label-text">Copy</span>
+              </button>
+            </div>
+            <span class="copy-status" data-copy-status role="status" aria-live="polite"></span>
+          </div>
+        </div>
+      </section>
     </main>
+
+    <footer class="site-footer" role="contentinfo">
+      <div class="wrap footer-wrap">
+        <div class="footer-brand">
+          <span class="brand">
+            <svg
+              class="brand-mark"
+              width="22"
+              height="22"
+              viewBox="0 0 32 32"
+              fill="none"
+              aria-hidden="true"
+            >
+              <rect x="4" y="3" width="20" height="26" rx="3" fill="#1c2129" stroke="#30363d" />
+              <path d="M24 3l4 4h-4z" fill="#FFB454" />
+              <path d="M8 10h10M8 14h8M8 18h6" stroke="#7ee787" stroke-width="1.6" stroke-linecap="round" />
+              <rect x="6" y="22" width="12" height="6" rx="2" fill="#FFF000" />
+              <text
+                x="12"
+                y="26.6"
+                text-anchor="middle"
+                font-family="JetBrains Mono, monospace"
+                font-size="4.5"
+                font-weight="700"
+                fill="#0d1117"
+              >SQL</text>
+            </svg>
+            <span class="brand-name">File SQL</span>
+          </span>
+          <span class="duckdb-pill" title="Query engine">
+            <span class="duckdb-dot" aria-hidden="true"></span>
+            Powered by DuckDB
+          </span>
+        </div>
+        <nav class="footer-nav" aria-label="Footer">
+          <a href="https://github.com/arunkumar1997/vscode-sql-files" rel="noopener">GitHub</a>
+          <a
+            href="https://marketplace.visualstudio.com/items?itemName=arunkumar1997.file-sql"
+            rel="noopener"
+            >VS Code Marketplace</a
+          >
+          <a href="https://www.producthunt.com/products/file-sql" rel="noopener">Product Hunt</a>
+          <a
+            href="https://github.com/arunkumar1997/vscode-sql-files/blob/main/LICENSE"
+            rel="noopener"
+            >MIT License</a
+          >
+        </nav>
+        <div class="footer-meta">
+          <span>Built by <a href="https://github.com/arunkumar1997" rel="noopener">@arunkumar1997</a></span>
+          <span>&copy; 2026 File SQL</span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="main.js" defer></script>
   </body>
 </html>
