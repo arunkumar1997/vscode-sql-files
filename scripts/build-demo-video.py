@@ -7,9 +7,11 @@ Same approach as scripts/build-og-image.py:
 
 Three chapters (chapter cards + animated scene each):
   1. Install once        ~10s  (VS Code Extensions Marketplace UI)
-  2. Right-click a file  ~12s  (auto-registers as a table, no dialog)
+  2. Right-click a file  ~8s   (cursor goes straight to 'Open with File SQL';
+                                the extension auto-registers the file — no
+                                dialog, no notification)
   3. Query with SQL      ~22s
-Total: ~44s at 60 fps => 2640 frames.
+Total: ~40s at 60 fps => 2400 frames.
 
 Fonts: JetBrains Mono only (matches OG image; keeps the script self-
 contained). Pillow is a dev-only tool — not added to the extension's
@@ -565,13 +567,15 @@ def _easeout(x: float) -> float:
 
 
 def scene_rightclick(t: float) -> Image.Image:
-    """Scene 2 timeline (~12s):
-     0.0 - 2.0 s  cursor glides in from the editor area and lands on the file
-     2.0 - 2.6 s  file becomes selected (right-click)
-     2.6 s        context menu fades in next to the file
-     3.5 - 9.5 s  cursor walks a few menu items, settling on 'Open with File SQL'
-    10.2 s        click ripple on 'Open with File SQL'
-    10.5 - 12 s   menu vanishes and the cursor drifts away — the extension
+    """Scene 2 timeline (~8s):
+     0.0 - 1.5 s  cursor glides from the editor area to the file
+     1.5 - 2.0 s  file becomes selected (right-click)
+     2.0 s        context menu fades in next to the file
+     2.5 - 3.0 s  cursor moves *directly* to 'Open with File SQL' — no
+                  walking through unrelated items; this is a demo.
+     3.0 - 6.5 s  cursor rests on 'Open with File SQL' (amber highlight)
+     6.5 s        click ripple
+     6.8 - 8.0 s  menu vanishes and the cursor drifts away — the extension
                   silently registers the file and opens the query editor
                   (there is no confirmation notification). The crossfade
                   into Scene 3 shows the resulting query editor with the
@@ -627,7 +631,7 @@ def scene_rightclick(t: float) -> Image.Image:
     file_cursor_y = file_y + 4
 
     # ---- Selected state after cursor arrives ----
-    if t >= 2.0:
+    if t >= 1.5:
         d.rectangle(
             (sb_x0 + 32, file_y - 2, sb_x1 - 6, file_y + 18),
             fill=(255, 255, 255, 18),
@@ -635,9 +639,9 @@ def scene_rightclick(t: float) -> Image.Image:
         )
 
     # ---- Context menu ----
-    menu_shown_at = 2.6
-    click_t = 10.2
-    menu_gone_at = 10.5
+    menu_shown_at = 2.0
+    click_t = 6.5
+    menu_gone_at = 6.8
 
     if menu_shown_at <= t < menu_gone_at:
         mx0 = sb_x1 + 10
@@ -659,20 +663,8 @@ def scene_rightclick(t: float) -> Image.Image:
             width=1,
         )
 
-        # Cursor hover schedule
-        hover_idx = None
-        if 3.5 <= t < 4.5:
-            hover_idx = 0
-        elif 4.5 <= t < 6.0:
-            hover_idx = 1  # Open with File SQL
-        elif 6.0 <= t < 7.0:
-            hover_idx = 2
-        elif 7.0 <= t < 8.0:
-            hover_idx = 4
-        elif 8.0 <= t < menu_gone_at:
-            hover_idx = 1
-        force_highlight_1 = t >= 4.5
-
+        # 'Open with File SQL' is amber-highlighted the whole time the
+        # menu is open — no wandering to unrelated items.
         for i, (label, kbd) in enumerate(CTX_MENU):
             row_y = 8 + i * line_h
             if label is None:
@@ -681,7 +673,7 @@ def scene_rightclick(t: float) -> Image.Image:
                     fill=(58, 58, 58, alpha),
                 )
                 continue
-            highlight = (i == hover_idx) or (i == 1 and force_highlight_1)
+            highlight = i == 1  # 'Open with File SQL'
             if highlight:
                 md.rounded_rectangle(
                     (4, row_y - 2, mw - 4, row_y + 20), radius=3, fill=(*ACCENT, alpha)
@@ -706,48 +698,46 @@ def scene_rightclick(t: float) -> Image.Image:
     # the sales table already in the Tables sidebar) tells the story.
 
     # ---- Cursor ----
+    # 1) approach the file, 2) linger while the menu appears, 3) move
+    # directly to 'Open with File SQL' (row 1), 4) rest there until
+    # click, 5) drift away after.
     start_x, start_y = x0 + 700, inner_top + 200
-    if t < 2.0:
-        p = _easeout(min(1.0, t / 2.0))
+    open_target_row = 1  # 'Open with File SQL'
+    mx0 = sb_x1 + 10
+    my0 = file_y + 8
+    row_h = 24
+    open_x = mx0 + 60
+    open_y = my0 + 8 + open_target_row * row_h + 6
+
+    if t < 1.5:
+        # Approach the file
+        p = _easeout(min(1.0, t / 1.5))
         cx = int(start_x + (file_cursor_x - start_x) * p)
         cy = int(start_y + (file_cursor_y - start_y) * p)
-    elif t < menu_shown_at:
+    elif t < 2.5:
+        # Right-click; wait a beat with the menu appearing
         cx, cy = file_cursor_x, file_cursor_y
+    elif t < 3.0:
+        # Move directly to 'Open with File SQL'
+        p = _easeout((t - 2.5) / 0.5)
+        cx = int(file_cursor_x + (open_x - file_cursor_x) * p)
+        cy = int(file_cursor_y + (open_y - file_cursor_y) * p)
     elif t < menu_gone_at:
-        # Hover schedule maps to a row_y inside the menu
-        idx_seq = [
-            (3.5, 4.5, 0),
-            (4.5, 6.0, 1),
-            (6.0, 7.0, 2),
-            (7.0, 8.0, 4),
-            (8.0, menu_gone_at, 1),
-        ]
-        target = 1
-        for s, e, idx in idx_seq:
-            if s <= t < e:
-                target = idx
-                break
-        mx0 = sb_x1 + 10
-        my0 = file_y + 8
-        row_h = 24
-        cx = mx0 + 60
-        cy = my0 + 8 + target * row_h + 6
+        # Rest on the target
+        cx, cy = open_x, open_y
     else:
-        # After the click the cursor drifts back toward the editor area
-        # so it doesn't sit on top of the toast.
+        # Drift back toward the editor area after the click
         p = _easeout(min(1.0, (t - menu_gone_at) / 1.0))
-        prev_x = sb_x1 + 10 + 60
-        prev_y = file_y + 8 + 8 + 24 + 6
         end_x, end_y = x0 + 600, inner_top + 200
-        cx = int(prev_x + (end_x - prev_x) * p)
-        cy = int(prev_y + (end_y - prev_y) * p)
+        cx = int(open_x + (end_x - open_x) * p)
+        cy = int(open_y + (end_y - open_y) * p)
 
     if 0 <= cx < W and 0 <= cy < H:
         draw_cursor(d, cx, cy)
 
     # Click ripple on 'Open with File SQL'
-    click_x = sb_x1 + 10 + 60
-    click_y = file_y + 8 + 8 + 1 * 24 + 6
+    click_x = open_x
+    click_y = open_y
     dt = t - click_t
     if 0 <= dt < 0.6:
         r = int(30 * (dt / 0.6))
@@ -1002,7 +992,7 @@ def scene_query(t: float) -> Image.Image:
 # Timeline
 # ---------------------------------------------------------------------------
 CH1_LEN = 10.0
-CH2_LEN = 12.0  # right-click → auto-registers, no Quick Pick step
+CH2_LEN = 8.0  # right-click → cursor goes straight to 'Open with File SQL'
 CH3_LEN = 22.0
 TOTAL = CH1_LEN + CH2_LEN + CH3_LEN
 
