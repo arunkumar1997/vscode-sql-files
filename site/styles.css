@@ -961,15 +961,17 @@ pre {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
+  min-width: 26px;
   height: 26px;
-  border-radius: 50%;
+  padding: 0 8px;
+  border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   font-weight: 700;
   border: 1px solid rgba(255, 180, 84, 0.35);
+  line-height: 1;
 }
 
 .ui-window {

@@ -6,10 +6,10 @@ Same approach as scripts/build-og-image.py:
   3. Save the first frame as demo-poster.png for slow connections
 
 Three chapters (chapter cards + animated scene each):
-  1. Install once       ~10s
-  2. Right-click a file ~18s
-  3. Query with SQL     ~22s
-Total: ~50s at 15 fps => 750 frames.
+  1. Install once        ~10s
+  2. Right-click a file  ~12s  (auto-registers as a table, no dialog)
+  3. Query with SQL      ~22s
+Total: ~44s at 15 fps => 660 frames.
 
 Fonts: JetBrains Mono only (matches OG image; keeps the script self-
 contained). Pillow is a dev-only tool — not added to the extension's
@@ -289,6 +289,15 @@ def _easeout(x: float) -> float:
 
 
 def scene_rightclick(t: float) -> Image.Image:
+    """Scene 2 timeline (~12s):
+       0.0 - 2.0 s  cursor glides in from the editor area and lands on the file
+       2.0 - 2.6 s  file becomes selected (right-click)
+       2.6 s        context menu fades in next to the file
+       3.5 - 9.5 s  cursor walks a few menu items, settling on 'Open with File SQL'
+      10.2 s        click ripple on 'Open with File SQL'
+      10.5 - 12 s   menu vanishes, an amber toast confirms the table was
+                    registered — no dialog, no path prompt. Ready to query.
+    """
     img = new_frame()
     d = ImageDraw.Draw(img, "RGBA")
     draw_chapter_ribbon(d, 2, "Right-click any file")
@@ -298,7 +307,6 @@ def scene_rightclick(t: float) -> Image.Image:
     draw_window(d, box, "customers-1000000  —  Visual Studio Code",
                 bg=VSCODE_BG)
 
-    # Layout
     x0, y0, x1, y1 = box
     inner_top = y0 + 30
     ab_w = 44
@@ -312,7 +320,6 @@ def scene_rightclick(t: float) -> Image.Image:
         d.rectangle((x0 + 12, cy, x0 + 32, cy + 20),
                     fill=(255, 255, 255) if i == 0 else (150, 155, 162),
                     outline=None)
-    # Active indicator
     d.rectangle((x0, inner_top + 12, x0 + 2, inner_top + 12 + 22),
                 fill=ACCENT)
 
@@ -320,36 +327,21 @@ def scene_rightclick(t: float) -> Image.Image:
     sb_x0 = x0 + ab_w
     sb_x1 = sb_x0 + sb_w
     d.rectangle((sb_x0, inner_top, sb_x1, y1), fill=VSCODE_SB)
-    # Panel header
     d.text((sb_x0 + 14, inner_top + 8), "EXPLORER",
            font=mono(10), fill=(138, 146, 154))
-    # Folder
     d.text((sb_x0 + 14, inner_top + 34), "\u25be  CUSTOMERS-1000000",
            font=mono(12), fill=(204, 204, 204))
-    # File
     file_y = inner_top + 58
-    # File icon (green square)
     d.rounded_rectangle((sb_x0 + 34, file_y + 2,
                          sb_x0 + 46, file_y + 14),
                         radius=2, fill=(78, 201, 176))
     d.text((sb_x0 + 52, file_y), "customers-1000000.csv",
            font=mono(12), fill=(204, 204, 204))
 
-    # Cursor animation:
-    # 0-2s: cursor moves from center-right to file
-    # 2-2.6s: brief pause (right-click ripple)
-    # 2.6s+: context menu fades in
-    # 6-9s: cursor moves down through menu items
-    # 9-10s: cursor lands on "Open with File SQL" (highlighted)
-    # 10-11s: click ripple
-    # 11-14s: menu disappears, quickpick slides in
-    # 14-17s: quickpick shows options; cursor picks "Enter Path"
-    # 17-18s: fade to next chapter
-
     file_cursor_x = sb_x0 + 100
     file_cursor_y = file_y + 4
 
-    # ---- Selected state after arrival ----
+    # ---- Selected state after cursor arrives ----
     if t >= 2.0:
         d.rectangle((sb_x0 + 32, file_y - 2, sb_x1 - 6, file_y + 18),
                     fill=(255, 255, 255, 18),
@@ -357,55 +349,42 @@ def scene_rightclick(t: float) -> Image.Image:
 
     # ---- Context menu ----
     menu_shown_at = 2.6
-    menu_gone_at = 11.0
-    quickpick_at = 12.0
-    quickpick_gone_at = 17.5
+    click_t = 10.2
+    menu_gone_at = 10.5
 
     if menu_shown_at <= t < menu_gone_at:
-        # Position: right next to the file
         mx0 = sb_x1 + 10
         my0 = file_y + 8
         mw = 300
         line_h = 24
-        # Height (with separator)
         rows = len(CTX_MENU)
         mh = 12 + line_h * rows + 4
-        # Fade-in over 0.4s
         p = min(1.0, (t - menu_shown_at) / 0.3)
         alpha = int(255 * _easeout(p))
 
-        # Draw menu with alpha
         menu = Image.new("RGBA", (mw, mh), (0, 0, 0, 0))
         md = ImageDraw.Draw(menu)
         md.rounded_rectangle((0, 0, mw, mh),
                              radius=4, fill=(*CTX_BG, alpha),
                              outline=(*CTX_BORDER, alpha), width=1)
-        # Cursor phase within the menu
-        # Determine which item is hovered (if any) based on time
+
+        # Cursor hover schedule
         hover_idx = None
         if 3.5 <= t < 4.5:
             hover_idx = 0
-        elif 4.5 <= t < 5.5:
+        elif 4.5 <= t < 6.0:
             hover_idx = 1     # Open with File SQL
-        elif 5.5 <= t < 6.5:
+        elif 6.0 <= t < 7.0:
             hover_idx = 2
-        elif 6.5 <= t < 7.5:
+        elif 7.0 <= t < 8.0:
             hover_idx = 4
-        elif 7.5 <= t < 8.5:
-            hover_idx = 1     # back to Open with File SQL
-        elif 8.5 <= t < 9.5:
+        elif 8.0 <= t < menu_gone_at:
             hover_idx = 1
-        elif 9.5 <= t < menu_gone_at:
-            hover_idx = 1
-
-        # Always keep "Open with File SQL" pre-highlighted for readability
-        # after t=4.5
         force_highlight_1 = t >= 4.5
 
         for i, (label, kbd) in enumerate(CTX_MENU):
             row_y = 8 + i * line_h
             if label is None:
-                # separator
                 md.line((8, row_y + line_h // 2 - 4,
                          mw - 8, row_y + line_h // 2 - 4),
                         fill=(58, 58, 58, alpha))
@@ -423,87 +402,63 @@ def scene_rightclick(t: float) -> Image.Image:
             md.text((14, row_y), label, font=mono(12), fill=text_fill)
             if kbd:
                 kf = mono(11)
-                kw, _ = md.textbbox((0, 0), kbd, font=kf)[2:4]
+                kw = md.textbbox((0, 0), kbd, font=kf)[2]
                 md.text((mw - 14 - kw, row_y + 1),
                         kbd, font=kf, fill=kbd_fill)
         img.paste(menu, (mx0, my0), menu)
 
-    # ---- QuickPick ----
-    if quickpick_at <= t < quickpick_gone_at:
-        # Slides down from top-centre
-        anim = min(1.0, (t - quickpick_at) / 0.4)
-        eased = _easeout(anim)
-        qp_w = 520
-        qp_x = x0 + (x1 - x0 - qp_w) // 2
-        qp_target_y = inner_top + 8
-        qp_start_y = inner_top - 40
-        qp_y = int(qp_start_y + (qp_target_y - qp_start_y) * eased)
+    # ---- Toast after the click: 'customers registered as table' ----
+    # (No Quick Pick — clicking 'Open with File SQL' auto-registers the file.
+    #  Quick Pick only appears via the separate 'Add Data Source' command.)
+    if t >= menu_gone_at:
+        toast_p = min(1.0, (t - menu_gone_at) / 0.5)
+        toast_alpha = int(255 * _easeout(toast_p))
+        toast_txt = "\u2713  customers registered as a table"
+        tf = mono_bold(14)
+        tw_w = d.textbbox((0, 0), toast_txt, font=tf)[2]
+        tpad_x, tpad_y = 20, 12
+        tw_h = 20
+        tw_full = tw_w + tpad_x * 2
+        th_full = tw_h + tpad_y * 2
+        tx = x0 + (x1 - x0 - tw_full) // 2
+        ty = inner_top + 40
+        toast = Image.new("RGBA", (tw_full, th_full), (0, 0, 0, 0))
+        tD = ImageDraw.Draw(toast)
+        tD.rounded_rectangle((0, 0, tw_full, th_full),
+                             radius=8,
+                             fill=(*SURFACE_2, toast_alpha),
+                             outline=(*ACCENT, min(toast_alpha, 180)),
+                             width=1)
+        tD.text((tpad_x, tpad_y + 2), toast_txt, font=tf,
+                fill=(*ACCENT, toast_alpha))
+        img.paste(toast, (tx, ty), toast)
 
-        qp_h = 118
-        # Card
-        d.rounded_rectangle((qp_x, qp_y, qp_x + qp_w, qp_y + qp_h),
-                            radius=4, fill=CTX_BG,
-                            outline=CTX_BORDER, width=1)
-        # Input
-        d.rectangle((qp_x, qp_y, qp_x + qp_w, qp_y + 30),
-                    fill=(60, 60, 60))
-        d.text((qp_x + 12, qp_y + 8),
-               "How would you like to add a data source?",
-               font=mono(13), fill=(176, 182, 190))
-        # Caret
-        if int((t - quickpick_at) * 2) % 2 == 0:
-            cx = qp_x + 12 + tw(d, "How would you like to add a data source?",
-                                mono(13))[0] + 4
-            d.rectangle((cx, qp_y + 8, cx + 1, qp_y + 22), fill=TEXT)
-        # Option 1: Enter Path (selected)
-        # After 14.5s make it selected (blue), before that it's plain
-        opt_selected = t >= 14.5
-        opt1_y = qp_y + 34
-        if opt_selected:
-            d.rectangle((qp_x + 4, opt1_y, qp_x + qp_w - 4, opt1_y + 36),
-                        fill=BLUE_SEL)
-            title_fill = (255, 255, 255)
-            desc_fill  = (255, 255, 255, 180)
-        else:
-            title_fill = (204, 204, 204)
-            desc_fill  = (138, 146, 154, 255)
-        # Pencil icon
-        d.text((qp_x + 14, opt1_y + 10), "\u270e",
-               font=mono(14), fill=title_fill)
-        d.text((qp_x + 36, opt1_y + 8), "Enter Path",
-               font=mono_bold(13), fill=title_fill)
-        d.text((qp_x + 130, opt1_y + 11),
-               "Type a local file/folder path or s3:// URI",
-               font=mono(11), fill=desc_fill)
-        # Option 2: Browse File
-        opt2_y = qp_y + 74
-        d.text((qp_x + 14, opt2_y + 10), "\u25ad",
-               font=mono(14), fill=(204, 204, 204))
-        d.text((qp_x + 36, opt2_y + 8), "Browse File",
-               font=mono_bold(13), fill=(204, 204, 204))
-        d.text((qp_x + 130, opt2_y + 11),
-               "Pick a file from your filesystem",
-               font=mono(11), fill=MUTED_2)
+        # Also show a hint at the bottom of the sidebar that the Tables
+        # panel now has an entry (subtle pulse dot on the File SQL icon in
+        # the activity bar).
+        if t >= menu_gone_at + 0.2:
+            pulse_p = ((t - menu_gone_at) * 2.0) % 1.0
+            pr = int(4 + 6 * (1 - abs(0.5 - pulse_p) * 2))
+            pa = int(160 * (1 - abs(0.5 - pulse_p) * 2))
+            d.ellipse((x0 + 26, inner_top + 12,
+                       x0 + 26 + pr, inner_top + 12 + pr),
+                      fill=(*ACCENT, pa))
 
     # ---- Cursor ----
-    # start pos (right side of the editor area)
     start_x, start_y = x0 + 700, inner_top + 200
     if t < 2.0:
-        # Move from start to file
         p = _easeout(min(1.0, t / 2.0))
         cx = int(start_x + (file_cursor_x - start_x) * p)
         cy = int(start_y + (file_cursor_y - start_y) * p)
     elif t < menu_shown_at:
         cx, cy = file_cursor_x, file_cursor_y
-    elif t < 9.5:
-        # Move down through menu items
-        # Menu items map: hover_idx -> row_y
+    elif t < menu_gone_at:
+        # Hover schedule maps to a row_y inside the menu
         idx_seq = [(3.5, 4.5, 0),
-                   (4.5, 5.5, 1),
-                   (5.5, 6.5, 2),
-                   (6.5, 7.5, 4),
-                   (7.5, 8.5, 1),
-                   (8.5, 9.5, 1)]
+                   (4.5, 6.0, 1),
+                   (6.0, 7.0, 2),
+                   (7.0, 8.0, 4),
+                   (8.0, menu_gone_at, 1)]
         target = 1
         for s, e, idx in idx_seq:
             if s <= t < e:
@@ -514,45 +469,29 @@ def scene_rightclick(t: float) -> Image.Image:
         row_h = 24
         cx = mx0 + 60
         cy = my0 + 8 + target * row_h + 6
-    elif t < 12.0:
-        # Cursor stays on "Open with File SQL", then click ripple, then move to Enter Path
-        mx0 = sb_x1 + 10
-        my0 = file_y + 8
-        row_h = 24
-        cx = mx0 + 60
-        cy = my0 + 8 + 1 * row_h + 6
-    elif t < quickpick_gone_at:
-        # Move to Enter Path
-        qp_w = 520
-        qp_x = x0 + (x1 - x0 - qp_w) // 2
-        qp_target_y = inner_top + 8
-        target_x = qp_x + 60
-        target_y = qp_target_y + 44
-        prev_x = sb_x1 + 10 + 60
-        prev_y = file_y + 8 + 8 + 1 * 24 + 6
-        p = _easeout(min(1.0, (t - 12.0) / 1.5))
-        cx = int(prev_x + (target_x - prev_x) * p)
-        cy = int(prev_y + (target_y - prev_y) * p)
     else:
-        cx, cy = 0, 0  # off-screen
+        # After the click the cursor drifts back toward the editor area
+        # so it doesn't sit on top of the toast.
+        p = _easeout(min(1.0, (t - menu_gone_at) / 1.0))
+        prev_x = sb_x1 + 10 + 60
+        prev_y = file_y + 8 + 8 + 24 + 6
+        end_x, end_y = x0 + 600, inner_top + 200
+        cx = int(prev_x + (end_x - prev_x) * p)
+        cy = int(prev_y + (end_y - prev_y) * p)
 
     if 0 <= cx < W and 0 <= cy < H:
         draw_cursor(d, cx, cy)
 
-    # Click ripple at t=10 (on Open with File SQL) and t=15 (on Enter Path)
-    for click_t, click_x, click_y in (
-        (10.2, sb_x1 + 10 + 60, file_y + 8 + 8 + 1 * 24 + 6),
-        (15.5,
-         x0 + (x1 - x0 - 520) // 2 + 60,
-         inner_top + 8 + 44),
-    ):
-        dt = t - click_t
-        if 0 <= dt < 0.6:
-            r = int(30 * (dt / 0.6))
-            a = int(120 * (1 - dt / 0.6))
-            d.ellipse((click_x - r, click_y - r,
-                       click_x + r, click_y + r),
-                      outline=(*ACCENT, a), width=2)
+    # Click ripple on 'Open with File SQL'
+    click_x = sb_x1 + 10 + 60
+    click_y = file_y + 8 + 8 + 1 * 24 + 6
+    dt = t - click_t
+    if 0 <= dt < 0.6:
+        r = int(30 * (dt / 0.6))
+        a = int(160 * (1 - dt / 0.6))
+        d.ellipse((click_x - r, click_y - r,
+                   click_x + r, click_y + r),
+                  outline=(*ACCENT, a), width=2)
 
     draw_footer(d)
     return img
@@ -784,7 +723,7 @@ def scene_query(t: float) -> Image.Image:
 # Timeline
 # ---------------------------------------------------------------------------
 CH1_LEN = 10.0
-CH2_LEN = 18.0
+CH2_LEN = 12.0     # right-click → auto-registers, no Quick Pick step
 CH3_LEN = 22.0
 TOTAL   = CH1_LEN + CH2_LEN + CH3_LEN
 
