@@ -177,7 +177,7 @@ code_x = mock_x0 + 58
 line_h = 26
 
 sql_lines = [
-    [("-- 2.3M rows · queried in 41 ms", COMMENT)],
+    [("-- Top regions by revenue, 2026", COMMENT)],
     [("SELECT", KEYWORD), (" region, ", TEXT), ("SUM", FN),
      ("(revenue) ", TEXT), ("AS", KEYWORD), (" total", TEXT)],
     [("FROM", KEYWORD), (" ", TEXT), ("'sales.parquet'", STRING)],
