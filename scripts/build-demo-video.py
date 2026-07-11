@@ -575,7 +575,7 @@ def scene_rightclick(t: float) -> Image.Image:
                   silently registers the file and opens the query editor
                   (there is no confirmation notification). The crossfade
                   into Scene 3 shows the resulting query editor with the
-                  customers table already loaded in the Tables sidebar.
+                  sales table already loaded in the Tables sidebar.
     """
     img = new_frame()
     d = ImageDraw.Draw(img, "RGBA")
@@ -583,7 +583,7 @@ def scene_rightclick(t: float) -> Image.Image:
 
     # VS Code window
     box = (80, 130, W - 80, H - 110)
-    draw_window(d, box, "customers-1000000  —  Visual Studio Code", bg=VSCODE_BG)
+    draw_window(d, box, "sales.parquet  —  Visual Studio Code", bg=VSCODE_BG)
 
     x0, y0, x1, y1 = box
     inner_top = y0 + 30
@@ -608,7 +608,7 @@ def scene_rightclick(t: float) -> Image.Image:
     d.text((sb_x0 + 14, inner_top + 8), "EXPLORER", font=mono(10), fill=(138, 146, 154))
     d.text(
         (sb_x0 + 14, inner_top + 34),
-        "\u25be  CUSTOMERS-1000000",
+        "\u25be  SALES-2026",
         font=mono(12),
         fill=(204, 204, 204),
     )
@@ -618,7 +618,7 @@ def scene_rightclick(t: float) -> Image.Image:
     )
     d.text(
         (sb_x0 + 52, file_y),
-        "customers-1000000.csv",
+        "sales.parquet",
         font=mono(12),
         fill=(204, 204, 204),
     )
@@ -703,7 +703,7 @@ def scene_rightclick(t: float) -> Image.Image:
     # opens the query editor directly — the extension does NOT surface a
     # confirmation notification. We simply let the menu vanish and the
     # crossfade to Scene 3 (which shows the resulting query editor with
-    # the customers table already in the Tables sidebar) tells the story.
+    # the sales table already in the Tables sidebar) tells the story.
 
     # ---- Cursor ----
     start_x, start_y = x0 + 700, inner_top + 200
@@ -774,7 +774,7 @@ SQL_LINES = [
         ("AS", KEYWORD),
         (" total", TEXT),
     ],
-    [("FROM", KEYWORD), (" ", TEXT), ("'sales.parquet'", STRING)],
+    [("FROM", KEYWORD), (" sales", TEXT)],
     [("WHERE", KEYWORD), (" year = ", TEXT), ("2026", NUM)],
     [("GROUP BY", KEYWORD), (" region", TEXT)],
     [("ORDER BY", KEYWORD), (" total ", TEXT), ("DESC", KEYWORD), (";", TEXT)],
@@ -832,19 +832,20 @@ def scene_query(t: float) -> Image.Image:
         radius=2,
         fill=(78, 201, 176),
     )
-    d.text((sb_x0 + 48, inner_top + 34), "customers", font=mono_bold(12), fill=TEXT)
-    d.text((sb_x0 + 130, inner_top + 36), "csv", font=mono(10), fill=MUTED)
+    d.text((sb_x0 + 48, inner_top + 34), "sales", font=mono_bold(12), fill=TEXT)
+    d.text((sb_x0 + 100, inner_top + 36), "parquet", font=mono(10), fill=MUTED)
 
     # Columns list — appear one by one over 0..2s
     cols = [
-        ("Index", "BIGINT"),
-        ("Customer Id", "VARCHAR"),
-        ("First Name", "VARCHAR"),
-        ("Last Name", "VARCHAR"),
-        ("Company", "VARCHAR"),
-        ("City", "VARCHAR"),
-        ("Country", "VARCHAR"),
-        ("Subscription Date", "DATE"),
+        ("Index",    "BIGINT"),
+        ("Order Id", "VARCHAR"),
+        ("Date",     "DATE"),
+        ("Year",     "BIGINT"),
+        ("Region",   "VARCHAR"),
+        ("Country",  "VARCHAR"),
+        ("Product",  "VARCHAR"),
+        ("Quantity", "BIGINT"),
+        ("Revenue",  "DECIMAL"),
     ]
     for i, (name, typ) in enumerate(cols):
         appear_at = 0.2 + i * 0.15

@@ -152,7 +152,7 @@ for i, color in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
                tx + 6, mock_y0 + tb_h // 2 + 6), fill=color)
 
 d.text((mock_x0 + 100, mock_y0 + 9),
-       "File SQL — sales.parquet", font=mono_reg(15), fill=MUTED)
+       "File SQL — Query Editor", font=mono_reg(15), fill=MUTED)
 
 # Tab strip
 tab_y0 = mock_y0 + tb_h
@@ -163,7 +163,7 @@ tab_w = 200
 d.rectangle((mock_x0, tab_y0, mock_x0 + tab_w, tab_y0 + tab_h), fill=SURFACE)
 d.rectangle((mock_x0, tab_y0, mock_x0 + tab_w, tab_y0 + 2), fill=ACCENT)
 d.line((mock_x0 + tab_w, tab_y0, mock_x0 + tab_w, tab_y0 + tab_h), fill=BORDER)
-d.text((mock_x0 + 18, tab_y0 + 8), "sales.parquet",
+d.text((mock_x0 + 18, tab_y0 + 8), "File SQL — Query Editor",
        font=mono_reg(15), fill=TEXT)
 d.text((mock_x0 + tab_w - 22, tab_y0 + 6), "×",
        font=mono_reg(18), fill=MUTED)
@@ -180,7 +180,7 @@ sql_lines = [
     [("-- Top regions by revenue, 2026", COMMENT)],
     [("SELECT", KEYWORD), (" region, ", TEXT), ("SUM", FN),
      ("(revenue) ", TEXT), ("AS", KEYWORD), (" total", TEXT)],
-    [("FROM", KEYWORD), (" ", TEXT), ("'sales.parquet'", STRING)],
+    [("FROM", KEYWORD), (" sales", TEXT)],
     [("WHERE", KEYWORD), (" year = ", TEXT), ("2026", NUM)],
     [("GROUP BY", KEYWORD), (" region", TEXT)],
     [("ORDER BY", KEYWORD), (" total ", TEXT), ("DESC", KEYWORD), (";", TEXT)],

@@ -35,9 +35,9 @@
     <meta name="twitter:image" content="https://arunkumar1997.github.io/vscode-sql-files/assets/og-image.png" />
 
     <!-- Icons -->
-    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="assets/file-sql-icon.png" type="image/png" />
     <link rel="alternate icon" href="assets/favicon.ico" />
-    <link rel="apple-touch-icon" href="assets/favicon.svg" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -56,28 +56,14 @@
     <header class="site-header" role="banner">
       <div class="wrap header-wrap">
         <a class="brand" href="./" aria-label="File SQL — home">
-          <svg
+          <img
             class="brand-mark"
+            src="assets/file-sql-icon.png"
+            alt=""
             width="28"
             height="28"
-            viewBox="0 0 32 32"
-            fill="none"
-            aria-hidden="true"
-          >
-            <rect x="4" y="3" width="20" height="26" rx="3" fill="#1c2129" stroke="#30363d" />
-            <path d="M24 3l4 4h-4z" fill="#FFB454" />
-            <path d="M8 10h10M8 14h8M8 18h6" stroke="#7ee787" stroke-width="1.6" stroke-linecap="round" />
-            <rect x="6" y="22" width="12" height="6" rx="2" fill="#FFF000" />
-            <text
-              x="12"
-              y="26.6"
-              text-anchor="middle"
-              font-family="JetBrains Mono, monospace"
-              font-size="4.5"
-              font-weight="700"
-              fill="#0d1117"
-            >SQL</text>
-          </svg>
+            decoding="async"
+          />
           <span class="brand-name">File SQL</span>
         </a>
         <nav class="site-nav" aria-label="Primary">
@@ -145,7 +131,7 @@
           <div
             class="mockup"
             role="img"
-            aria-label="A File SQL Query Editor window showing a SQL query against sales.parquet with a results grid below."
+            aria-label="A File SQL Query Editor window running SELECT region, SUM(revenue) AS total FROM sales, with a results grid showing the top four regions by revenue."
           >
             <div class="mockup-titlebar">
               <span class="lights" aria-hidden="true">
@@ -185,7 +171,7 @@
               </div>
               <pre class="code"><code id="typewriter"><span class="tok-comment">-- Top regions by revenue, 2026</span>
 <span class="tok-keyword">SELECT</span> region, <span class="tok-fn">SUM</span>(revenue) <span class="tok-keyword">AS</span> total
-<span class="tok-keyword">FROM</span> <span class="tok-string">'sales.parquet'</span>
+<span class="tok-keyword">FROM</span> sales
 <span class="tok-keyword">WHERE</span> year <span class="tok-op">=</span> <span class="tok-num">2026</span>
 <span class="tok-keyword">GROUP BY</span> region
 <span class="tok-keyword">ORDER BY</span> total <span class="tok-keyword">DESC</span>;</code></pre>
@@ -407,7 +393,7 @@
               <div
                 class="ui-window"
                 role="img"
-                aria-label="A VS Code Explorer with a context menu open on customers-1000000.csv, highlighting the 'Open with File SQL' option."
+                aria-label="A VS Code Explorer with a context menu open on sales.parquet, highlighting the 'Open with File SQL' option."
               >
                 <div class="ui-titlebar">
                   <span class="lights" aria-hidden="true">
@@ -434,11 +420,11 @@
                       <span class="dots">···</span>
                     </div>
                     <div class="ui-folder">
-                      <span class="chev">▾</span> CUSTOMERS-1000000
+                      <span class="chev">▾</span> SALES-2026
                     </div>
                     <div class="ui-file selected">
                       <span class="file-dot"></span>
-                      customers-1000000.csv
+                      sales.parquet
                     </div>
 
                     <div class="ui-context" role="presentation">
@@ -537,7 +523,7 @@
               <div
                 class="ui-window ui-window--editor"
                 role="img"
-                aria-label="The File SQL Query Editor: a Tables sidebar showing the customers CSV schema, a SELECT * FROM customers query, and a results grid with real customer rows."
+                aria-label="The File SQL Query Editor: a Tables sidebar showing the sales parquet schema, a SELECT * FROM sales query, and a results grid with seven sample sales rows."
               >
                 <div class="ui-titlebar">
                   <span class="lights" aria-hidden="true">
@@ -571,21 +557,21 @@
                     <div class="tbl-item">
                       <span class="chev">▾</span>
                       <span class="tbl-file-dot"></span>
-                      <span class="tbl-name">customers</span>
-                      <span class="tbl-badge">csv</span>
+                      <span class="tbl-name">sales</span>
+                      <span class="tbl-badge">parquet</span>
                       <span class="tbl-close">×</span>
                     </div>
                     <ul class="tbl-cols" role="list">
                       <li><span class="col-dot"></span><span class="col-name">Index</span><span class="col-type">BIGINT</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">Customer Id</span><span class="col-type">VARCHAR</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">First Name</span><span class="col-type">VARCHAR</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">Last Name</span><span class="col-type">VARCHAR</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">Company</span><span class="col-type">VARCHAR</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">City</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Order Id</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Date</span><span class="col-type">DATE</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Year</span><span class="col-type">BIGINT</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Region</span><span class="col-type">VARCHAR</span></li>
                       <li><span class="col-dot"></span><span class="col-name">Country</span><span class="col-type">VARCHAR</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">Phone 1</span><span class="col-type">VARCHAR</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">Email</span><span class="col-type">VARCHAR</span></li>
-                      <li><span class="col-dot"></span><span class="col-name">Subscription Date</span><span class="col-type">DATE</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Product</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Category</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Quantity</span><span class="col-type">BIGINT</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Revenue</span><span class="col-type">DECIMAL</span></li>
                     </ul>
                   </aside>
                   <div class="ui-editor">
@@ -620,29 +606,29 @@
                       </span>
                     </div>
                     <pre class="ui-code"><code><span class="ln">1</span><span class="tok-keyword">SELECT</span> *
-<span class="ln">2</span><span class="tok-keyword">FROM</span> customers</code></pre>
+<span class="ln">2</span><span class="tok-keyword">FROM</span> sales</code></pre>
                     <div class="ui-results-wrap">
                       <table class="ui-results">
                         <thead>
                           <tr>
                             <th class="c-idx">#</th>
-                            <th>Index</th>
-                            <th>Customer Id</th>
-                            <th>First Name</th>
-                            <th>Last Name</th>
-                            <th>Company</th>
-                            <th>City</th>
+                            <th>Order Id</th>
+                            <th>Date</th>
+                            <th>Region</th>
                             <th>Country</th>
+                            <th>Product</th>
+                            <th>Quantity</th>
+                            <th>Revenue</th>
                           </tr>
                         </thead>
                         <tbody>
-                          <tr><td class="c-idx">1</td><td>1</td><td>EB54EF1154C3A78</td><td>Heather</td><td>Callahan</td><td>Mosley-David</td><td>Lake Jeffborough</td><td>Norway</td></tr>
-                          <tr><td class="c-idx">2</td><td>2</td><td>10dAcafEBbA5FcA</td><td>Kristina</td><td>Ferrell</td><td>Horn, Shepard and Watson</td><td>Aaronville</td><td>Andorra</td></tr>
-                          <tr><td class="c-idx">3</td><td>3</td><td>67DAB15Ebe4BE4a</td><td>Briana</td><td>Andersen</td><td>Irwin-Oneal</td><td>East Jordan</td><td>Nepal</td></tr>
-                          <tr><td class="c-idx">4</td><td>4</td><td>6d350C5E5eDB4EE</td><td>Patty</td><td>Ponce</td><td>Richardson Group</td><td>East Kristintown</td><td>N. Mariana</td></tr>
-                          <tr><td class="c-idx">5</td><td>5</td><td>5820deAdCF23EFe</td><td>Kathleen</td><td>Mccormick</td><td>Carson-Burch</td><td>Andresmouth</td><td>Macao</td></tr>
-                          <tr><td class="c-idx">6</td><td>6</td><td>E1CDEaC63fDd5aA</td><td>Trevor</td><td>Lee</td><td>Maddox Group</td><td>Lake Madelineburgh</td><td>Senegal</td></tr>
-                          <tr><td class="c-idx">7</td><td>7</td><td>3e1187fCcebC8d2</td><td>Mathew</td><td>Hoffman</td><td>Bender, Pittman and Kidd</td><td>West Ralph</td><td>Uzbekistan</td></tr>
+                          <tr><td class="c-idx">1</td><td>ORD-000001</td><td>2026-01-15</td><td>APAC</td><td>Japan</td><td>Widget Pro</td><td class="c-num">12</td><td class="c-num">$4,821.94</td></tr>
+                          <tr><td class="c-idx">2</td><td>ORD-000002</td><td>2026-01-16</td><td>EMEA</td><td>Germany</td><td>Widget Lite</td><td class="c-num">3</td><td class="c-num">$321.40</td></tr>
+                          <tr><td class="c-idx">3</td><td>ORD-000003</td><td>2026-01-16</td><td>APAC</td><td>Singapore</td><td>Gizmo XL</td><td class="c-num">8</td><td class="c-num">$2,987.11</td></tr>
+                          <tr><td class="c-idx">4</td><td>ORD-000004</td><td>2026-01-17</td><td>AMER</td><td>USA</td><td>Widget Pro</td><td class="c-num">24</td><td class="c-num">$9,643.88</td></tr>
+                          <tr><td class="c-idx">5</td><td>ORD-000005</td><td>2026-01-17</td><td>EMEA</td><td>France</td><td>Gizmo Mini</td><td class="c-num">15</td><td class="c-num">$1,102.58</td></tr>
+                          <tr><td class="c-idx">6</td><td>ORD-000006</td><td>2026-01-18</td><td>APAC</td><td>Australia</td><td>Widget Lite</td><td class="c-num">5</td><td class="c-num">$535.67</td></tr>
+                          <tr><td class="c-idx">7</td><td>ORD-000007</td><td>2026-01-18</td><td>LATAM</td><td>Brazil</td><td>Gizmo XL</td><td class="c-num">2</td><td class="c-num">$746.78</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -713,28 +699,14 @@
       <div class="wrap footer-wrap">
         <div class="footer-brand">
           <span class="brand">
-            <svg
+            <img
               class="brand-mark"
+              src="assets/file-sql-icon.png"
+              alt=""
               width="22"
               height="22"
-              viewBox="0 0 32 32"
-              fill="none"
-              aria-hidden="true"
-            >
-              <rect x="4" y="3" width="20" height="26" rx="3" fill="#1c2129" stroke="#30363d" />
-              <path d="M24 3l4 4h-4z" fill="#FFB454" />
-              <path d="M8 10h10M8 14h8M8 18h6" stroke="#7ee787" stroke-width="1.6" stroke-linecap="round" />
-              <rect x="6" y="22" width="12" height="6" rx="2" fill="#FFF000" />
-              <text
-                x="12"
-                y="26.6"
-                text-anchor="middle"
-                font-family="JetBrains Mono, monospace"
-                font-size="4.5"
-                font-weight="700"
-                fill="#0d1117"
-              >SQL</text>
-            </svg>
+              decoding="async"
+            />
             <span class="brand-name">File SQL</span>
           </span>
           <span class="duckdb-pill" title="Query engine">
