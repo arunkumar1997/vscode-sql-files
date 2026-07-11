@@ -712,7 +712,7 @@ pre {
 }
 
 /* --------------------------------------------------------------------------
-   8. Demo video placeholder
+   8. Demo video
    -------------------------------------------------------------------------- */
 .video-frame {
   position: relative;
@@ -726,36 +726,13 @@ pre {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
-.video-inner {
-  text-align: center;
-  padding: var(--sp-5);
-}
-.play-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid rgba(255, 180, 84, 0.3);
-  margin: 0 auto var(--sp-4);
-}
-.video-caption {
-  font-family: var(--font-mono);
-  font-size: var(--fs-lg);
-  color: var(--text);
-  margin: 0 0 var(--sp-2);
-}
-.video-sub {
-  font-size: var(--fs-sm);
-  color: var(--muted);
-  margin: 0;
+.demo-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--bg);
 }
 
 /* --------------------------------------------------------------------------
