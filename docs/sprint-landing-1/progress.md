@@ -32,6 +32,11 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · 🚧 Blocked
 
 _(append newest-first — timestamp + who + what)_
 
+- **2026-07-11, Nova + Milo:** Added a new "See it in your editor" section (between How-it-works and Install CTA) with three pure-HTML/CSS mockups matching the technique of the hero `sales.parquet` window — no images, no external assets. The mockups reproduce three real UX moments the CEO supplied as reference screenshots:
+  1. VS Code Explorer with the file-context menu open on `customers-1000000.csv`, with "Open with File SQL" highlighted in the brand amber
+  2. The Quick Pick asking "How would you like to add a data source?" with "Enter Path" and "Browse File" (Enter Path selected in VS Code selection blue)
+  3. The full File SQL Query Editor: Tables sidebar with typed columns (Index BIGINT / Customer Id VARCHAR / ...), an active tab, green Run button + Ctrl+Enter hint + "1000 rows · results truncated" meta, syntax-highlighted `SELECT * FROM customers`, and a results grid with seven real customer rows
+  Semantics: each `.ui-window` is a `role="img"` with a descriptive `aria-label` summarising what it shows; all decorative UI text is inside `aria-hidden` regions so screen-readers get the summary instead of the noisy fake UI. Responsive: mockups 1 and 2 sit side-by-side on desktop (2-col) and stack at ≤820px; mockup 3 is always full-width. On very narrow screens the query editor drops the column-type badges and hides the toolbar hint. Combined page weight (HTML+CSS+JS gzipped) is now **~17 KB** — still well under the 30 KB budget.
 - **2026-07-11, Nova + Milo:** T11 pass. Rendered the page headless in Chromium at 320 / 375 / 768 / 1024 / 1440 and iterated. Caught and fixed:
   - Hero headline wrapped mid-line at 1440px (column ratio + max font too aggressive). Fixed by capping headline to `clamp(1.9rem, 2.4vw + 1rem, 2.5rem)` and stacking the hero at ≤1080px (was ≤960px), so 1024-wide laptops get the full-width headline.
   - Grid items in `.formats`, `.features`, `.how` were expanding beyond their tracks because default `min-width: auto` let inner `<pre>` snippets push the columns wider than the wrap. Added `min-width: 0` to `.format-card`, `.feature`, `.step`.

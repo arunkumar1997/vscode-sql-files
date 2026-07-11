@@ -373,6 +373,269 @@
         </div>
       </section>
 
+      <!-- ================= WALKTHROUGH MOCKUPS ================= -->
+      <section id="walkthrough" class="section walkthrough" aria-labelledby="walk-title">
+        <div class="wrap">
+          <h2 id="walk-title" class="section-title">See it in your editor</h2>
+          <p class="section-lede">Three real moments — no plugins to configure, no separate app to open.</p>
+
+          <div class="walk-grid">
+            <!-- ---------- Mockup 1: right-click context menu ---------- -->
+            <figure class="walk-item walk-item--half">
+              <div
+                class="ui-window"
+                role="img"
+                aria-label="A VS Code Explorer with a context menu open on customers-1000000.csv, highlighting the 'Open with File SQL' option."
+              >
+                <div class="ui-titlebar">
+                  <span class="lights" aria-hidden="true">
+                    <i class="light light-red"></i>
+                    <i class="light light-yellow"></i>
+                    <i class="light light-green"></i>
+                  </span>
+                  <span class="ui-menubar" aria-hidden="true">
+                    <span>File</span><span>Edit</span><span>Selection</span><span>View</span><span>Go</span><span>Run</span><span>Terminal</span><span>Help</span>
+                  </span>
+                </div>
+                <div class="ui-body ui-body--explorer" aria-hidden="true">
+                  <nav class="ui-activity">
+                    <span class="ab-icon ab-active"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                  </nav>
+                  <aside class="ui-explorer">
+                    <div class="ui-panel-header">
+                      <span>EXPLORER</span>
+                      <span class="dots">···</span>
+                    </div>
+                    <div class="ui-folder">
+                      <span class="chev">▾</span> CUSTOMERS-1000000
+                    </div>
+                    <div class="ui-file selected">
+                      <span class="file-dot"></span>
+                      customers-1000000.csv
+                    </div>
+
+                    <div class="ui-context" role="presentation">
+                      <div class="ctx-item">
+                        <span>Open Preview</span><span class="ctx-kbd">Ctrl+Shift+V</span>
+                      </div>
+                      <div class="ctx-item is-hover">
+                        <span>Open with File SQL</span>
+                      </div>
+                      <div class="ctx-item">
+                        <span>Open to the Side</span><span class="ctx-kbd">Ctrl+Enter</span>
+                      </div>
+                      <div class="ctx-item">
+                        <span>Open With...</span>
+                      </div>
+                      <div class="ctx-item">
+                        <span>Reveal in File Explorer</span><span class="ctx-kbd">Shift+Alt+R</span>
+                      </div>
+                      <div class="ctx-item">
+                        <span>Open in Integrated Terminal</span>
+                      </div>
+                      <div class="ctx-sep"></div>
+                      <div class="ctx-item">
+                        <span>Select for Compare</span>
+                      </div>
+                      <div class="ctx-sep"></div>
+                      <div class="ctx-item">
+                        <span>Cut</span><span class="ctx-kbd">Ctrl+X</span>
+                      </div>
+                      <div class="ctx-item">
+                        <span>Copy</span><span class="ctx-kbd">Ctrl+C</span>
+                      </div>
+                    </div>
+                  </aside>
+                </div>
+              </div>
+              <figcaption class="walk-cap">
+                <span class="walk-num">1</span>
+                <span>Right-click any file &rarr; <em>Open with File SQL</em>.</span>
+              </figcaption>
+            </figure>
+
+            <!-- ---------- Mockup 2: quick pick ---------- -->
+            <figure class="walk-item walk-item--half">
+              <div
+                class="ui-window"
+                role="img"
+                aria-label="A VS Code Quick Pick titled 'How would you like to add a data source?' with two options: 'Enter Path' (selected) and 'Browse File'."
+              >
+                <div class="ui-titlebar">
+                  <span class="lights" aria-hidden="true">
+                    <i class="light light-red"></i>
+                    <i class="light light-yellow"></i>
+                    <i class="light light-green"></i>
+                  </span>
+                  <span class="ui-title">Command Palette</span>
+                </div>
+                <div class="ui-body ui-body--quickpick" aria-hidden="true">
+                  <div class="qp">
+                    <div class="qp-input">
+                      <span class="qp-placeholder">How would you like to add a data source?</span>
+                      <span class="qp-caret"></span>
+                    </div>
+                    <div class="qp-list">
+                      <div class="qp-option is-selected">
+                        <span class="qp-icon" aria-hidden="true">
+                          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 2l3 3-8 8-4 1 1-4z"/>
+                          </svg>
+                        </span>
+                        <span class="qp-title">Enter Path</span>
+                        <span class="qp-desc">Type a local file/folder path or s3:// URI</span>
+                      </div>
+                      <div class="qp-option">
+                        <span class="qp-icon" aria-hidden="true">
+                          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6z"/>
+                            <path d="M9 2v4h4"/>
+                          </svg>
+                        </span>
+                        <span class="qp-title">Browse File</span>
+                        <span class="qp-desc">Pick a file from your filesystem</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption class="walk-cap">
+                <span class="walk-num">2</span>
+                <span>Point at a path or pick a bucket.</span>
+              </figcaption>
+            </figure>
+
+            <!-- ---------- Mockup 3: full query editor ---------- -->
+            <figure class="walk-item walk-item--full">
+              <div
+                class="ui-window ui-window--editor"
+                role="img"
+                aria-label="The File SQL Query Editor: a Tables sidebar showing the customers CSV schema, a SELECT * FROM customers query, and a results grid with real customer rows."
+              >
+                <div class="ui-titlebar">
+                  <span class="lights" aria-hidden="true">
+                    <i class="light light-red"></i>
+                    <i class="light light-yellow"></i>
+                    <i class="light light-green"></i>
+                  </span>
+                  <span class="ui-title">File SQL — Query Editor</span>
+                </div>
+                <div class="ui-body ui-body--editor" aria-hidden="true">
+                  <nav class="ui-activity">
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon"></span>
+                    <span class="ab-icon ab-active"></span>
+                  </nav>
+                  <aside class="ui-tables">
+                    <div class="ui-panel-header">
+                      <span>File SQL: Tables</span>
+                      <span class="panel-actions">
+                        <span class="pa">⌘</span>
+                        <span class="pa">+</span>
+                        <span class="pa">▤</span>
+                        <span class="pa">▶</span>
+                        <span class="pa">↗</span>
+                      </span>
+                    </div>
+                    <div class="tbl-item">
+                      <span class="chev">▾</span>
+                      <span class="tbl-file-dot"></span>
+                      <span class="tbl-name">customers</span>
+                      <span class="tbl-badge">csv</span>
+                      <span class="tbl-close">×</span>
+                    </div>
+                    <ul class="tbl-cols" role="list">
+                      <li><span class="col-dot"></span><span class="col-name">Index</span><span class="col-type">BIGINT</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Customer Id</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">First Name</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Last Name</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Company</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">City</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Country</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Phone 1</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Email</span><span class="col-type">VARCHAR</span></li>
+                      <li><span class="col-dot"></span><span class="col-name">Subscription Date</span><span class="col-type">DATE</span></li>
+                    </ul>
+                  </aside>
+                  <div class="ui-editor">
+                    <div class="ui-editor-tabs">
+                      <div class="tab tab-active">
+                        <span class="tab-dot"></span>
+                        <span>File SQL — Query Editor</span>
+                        <span class="tab-close">×</span>
+                      </div>
+                      <div class="tab tab-idle">
+                        <span>untitled-1</span>
+                        <span class="tab-close">×</span>
+                      </div>
+                    </div>
+                    <div class="ui-editor-toolbar">
+                      <button type="button" class="run-btn" tabindex="-1">
+                        <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor" aria-hidden="true">
+                          <path d="M2 1l9 5-9 5z"/>
+                        </svg>
+                        Run
+                      </button>
+                      <span class="tb-hint">Ctrl+Enter · select text to run partial query</span>
+                      <span class="tb-meta">
+                        <span>1000 rows</span>
+                        <span class="tb-warn">
+                          <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M8 2l7 12H1z"/>
+                            <path d="M8 6v3M8 12v.01"/>
+                          </svg>
+                          results truncated
+                        </span>
+                      </span>
+                    </div>
+                    <pre class="ui-code"><code><span class="ln">1</span><span class="tok-keyword">SELECT</span> *
+<span class="ln">2</span><span class="tok-keyword">FROM</span> customers</code></pre>
+                    <div class="ui-results-wrap">
+                      <table class="ui-results">
+                        <thead>
+                          <tr>
+                            <th class="c-idx">#</th>
+                            <th>Index</th>
+                            <th>Customer Id</th>
+                            <th>First Name</th>
+                            <th>Last Name</th>
+                            <th>Company</th>
+                            <th>City</th>
+                            <th>Country</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr><td class="c-idx">1</td><td>1</td><td>EB54EF1154C3A78</td><td>Heather</td><td>Callahan</td><td>Mosley-David</td><td>Lake Jeffborough</td><td>Norway</td></tr>
+                          <tr><td class="c-idx">2</td><td>2</td><td>10dAcafEBbA5FcA</td><td>Kristina</td><td>Ferrell</td><td>Horn, Shepard and Watson</td><td>Aaronville</td><td>Andorra</td></tr>
+                          <tr><td class="c-idx">3</td><td>3</td><td>67DAB15Ebe4BE4a</td><td>Briana</td><td>Andersen</td><td>Irwin-Oneal</td><td>East Jordan</td><td>Nepal</td></tr>
+                          <tr><td class="c-idx">4</td><td>4</td><td>6d350C5E5eDB4EE</td><td>Patty</td><td>Ponce</td><td>Richardson Group</td><td>East Kristintown</td><td>N. Mariana</td></tr>
+                          <tr><td class="c-idx">5</td><td>5</td><td>5820deAdCF23EFe</td><td>Kathleen</td><td>Mccormick</td><td>Carson-Burch</td><td>Andresmouth</td><td>Macao</td></tr>
+                          <tr><td class="c-idx">6</td><td>6</td><td>E1CDEaC63fDd5aA</td><td>Trevor</td><td>Lee</td><td>Maddox Group</td><td>Lake Madelineburgh</td><td>Senegal</td></tr>
+                          <tr><td class="c-idx">7</td><td>7</td><td>3e1187fCcebC8d2</td><td>Mathew</td><td>Hoffman</td><td>Bender, Pittman and Kidd</td><td>West Ralph</td><td>Uzbekistan</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption class="walk-cap">
+                <span class="walk-num">3</span>
+                <span>Write SQL, hit <kbd>Run</kbd> — schema on the left, results below.</span>
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
       <!-- ================= INSTALL CTA ================= -->
       <section class="section install-cta" aria-labelledby="install-title">
         <div class="wrap install-wrap">
