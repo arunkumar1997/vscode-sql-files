@@ -668,7 +668,6 @@ pre {
   font-family: var(--font-mono);
   white-space: nowrap;
 }
-.mockup-toolbar .tb-dot { color: var(--muted); }
 
 /* --- Hero mockup results — reuse the extension-styled .ui-results grid,
        but nudge it a bit larger so it holds its own inside the hero. */
