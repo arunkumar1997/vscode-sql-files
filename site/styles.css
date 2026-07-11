@@ -623,42 +623,94 @@ pre {
 .tok-op      { color: var(--syn-op); }
 .tok-muted   { color: var(--muted); }
 
-.mockup-results {
-  border-top: 1px solid var(--border);
-  background: #10151d;
-  font-family: var(--font-mono);
-}
-.results-head {
+/* --- Hero mockup toolbar (Run button + hint + rows/timing meta) --------
+   Same visual language as the real File SQL query panel: green Run button,
+   Ctrl+Enter hint on the left, row count on the right. Kept slightly larger
+   than the walkthrough mockups so it reads as the hero showcase. */
+.mockup-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: 8px 14px;
-  font-size: var(--fs-xs);
-  color: var(--muted-2);
+  background: #10151d;
   border-bottom: 1px solid var(--border);
-}
-.results-title { color: var(--text); font-weight: 500; }
-.results-meta { color: var(--muted); }
-
-.results-table {
-  width: 100%;
-  border-collapse: collapse;
+  color: var(--muted);
+  font-family: var(--font-sans);
   font-size: var(--fs-xs);
+  overflow: hidden;
 }
-.results-table th,
-.results-table td {
-  padding: 6px 14px;
-  text-align: left;
-  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+.mockup-toolbar .run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #369655;
+  color: #ffffff;
+  border: 0;
+  border-radius: 3px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: default;
+  pointer-events: none;
 }
-.results-table th {
+.mockup-toolbar .tb-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mockup-toolbar .tb-meta {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
   color: var(--muted-2);
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.015);
+  font-family: var(--font-mono);
+  white-space: nowrap;
 }
-.results-table td { color: var(--text); }
-.results-table .num { text-align: right; color: var(--syn-num); }
-.results-table tbody tr:last-child td { border-bottom: 0; }
+.mockup-toolbar .tb-dot { color: var(--muted); }
+
+/* --- Hero mockup results — reuse the extension-styled .ui-results grid,
+       but nudge it a bit larger so it holds its own inside the hero. */
+.mockup-results-wrap {
+  border-top: 1px solid var(--border);
+}
+.mockup .ui-results {
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+}
+.mockup .ui-results th,
+.mockup .ui-results td {
+  padding: 7px 14px;
+}
+.mockup .ui-results th {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: #d4d4d4;
+  background: #252526;
+  font-weight: 600;
+}
+.mockup .ui-results .c-idx {
+  width: 38px;
+  color: var(--muted);
+  text-align: center;
+  background: rgba(0, 0, 0, 0.18);
+  font-family: var(--font-mono);
+}
+.mockup .ui-results .c-num {
+  text-align: right;
+  color: var(--syn-num);
+}
+
+/* Narrow-screen tuning so the hero mockup stays legible without a horizontal
+   page scroll on phones. */
+@media (max-width: 520px) {
+  .mockup-toolbar { font-size: 10.5px; padding: 6px 10px; gap: 6px; }
+  .mockup-toolbar .tb-hint { display: none; }
+  .mockup .ui-results { font-size: 11px; }
+  .mockup .ui-results th,
+  .mockup .ui-results td { padding: 5px 10px; }
+}
 
 /* --------------------------------------------------------------------------
    8. Demo video placeholder
