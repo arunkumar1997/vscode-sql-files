@@ -10,39 +10,44 @@ Design intent (matches site/styles.css):
   - right column: a mini VS Code window showing a SQL query
   - footer band: brand mark + URL, DuckDB pill on the right
 """
+
 import math
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 # --- Palette (kept in lockstep with site/styles.css) -----------------------
-BG          = (13, 17, 23)
-SURFACE     = (22, 27, 34)
-SURFACE_2   = (28, 33, 41)
-BORDER      = (48, 54, 61)
-TEXT        = (230, 237, 243)
-MUTED       = (125, 133, 144)
-MUTED_2     = (153, 161, 172)
-ACCENT      = (255, 180, 84)
-DUCKDB      = (255, 240, 0)
-KEYWORD     = ACCENT
-STRING      = (165, 229, 161)
-NUM         = (121, 192, 255)
-FN          = (210, 168, 255)
-COMMENT     = (110, 118, 129)
-INK         = BG
+BG = (13, 17, 23)
+SURFACE = (22, 27, 34)
+SURFACE_2 = (28, 33, 41)
+BORDER = (48, 54, 61)
+TEXT = (230, 237, 243)
+MUTED = (125, 133, 144)
+MUTED_2 = (153, 161, 172)
+ACCENT = (255, 180, 84)
+DUCKDB = (255, 240, 0)
+KEYWORD = ACCENT
+STRING = (165, 229, 161)
+NUM = (121, 192, 255)
+FN = (210, 168, 255)
+COMMENT = (110, 118, 129)
+INK = BG
 
 W, H = 1200, 630
 FONTS = Path("/tmp/fs-fonts")
 
+
 def font(name, size):
     return ImageFont.truetype(str(FONTS / name), size)
 
+
 mono_bold = lambda s: font("JetBrainsMono-Bold.ttf", s)
-mono_reg  = lambda s: font("JetBrainsMono-Regular.ttf", s)
+mono_reg = lambda s: font("JetBrainsMono-Regular.ttf", s)
+
 
 def text_size(d, s, f):
     b = d.textbbox((0, 0), s, font=f)
     return b[2] - b[0], b[3] - b[1]
+
 
 # ---------------------------------------------------------------------------
 # 1. Base background — navy + faint grid + a properly-shaped amber glow
@@ -131,28 +136,40 @@ for i, alpha in enumerate([10, 18, 26]):
     off = (i + 1) * 8
     d.rounded_rectangle(
         (mock_x0 + off, mock_y0 + off, mock_x1 + off, mock_y1 + off),
-        radius=r, fill=(0, 0, 0, alpha))
+        radius=r,
+        fill=(0, 0, 0, alpha),
+    )
 
 # Card
-d.rounded_rectangle((mock_x0, mock_y0, mock_x1, mock_y1),
-                    radius=r, fill=SURFACE, outline=BORDER, width=1)
+d.rounded_rectangle(
+    (mock_x0, mock_y0, mock_x1, mock_y1),
+    radius=r,
+    fill=SURFACE,
+    outline=BORDER,
+    width=1,
+)
 
 # Title bar
 tb_h = 36
-d.rounded_rectangle((mock_x0, mock_y0, mock_x1, mock_y0 + tb_h),
-                    radius=r, fill=(16, 21, 29))
-d.rectangle((mock_x0, mock_y0 + tb_h - r, mock_x1, mock_y0 + tb_h),
-            fill=(16, 21, 29))
+d.rounded_rectangle(
+    (mock_x0, mock_y0, mock_x1, mock_y0 + tb_h), radius=r, fill=(16, 21, 29)
+)
+d.rectangle((mock_x0, mock_y0 + tb_h - r, mock_x1, mock_y0 + tb_h), fill=(16, 21, 29))
 d.line((mock_x0, mock_y0 + tb_h, mock_x1, mock_y0 + tb_h), fill=BORDER)
 
 # Traffic lights
 for i, color in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
     tx = mock_x0 + 20 + i * 20
-    d.ellipse((tx - 6, mock_y0 + tb_h // 2 - 6,
-               tx + 6, mock_y0 + tb_h // 2 + 6), fill=color)
+    d.ellipse(
+        (tx - 6, mock_y0 + tb_h // 2 - 6, tx + 6, mock_y0 + tb_h // 2 + 6), fill=color
+    )
 
-d.text((mock_x0 + 100, mock_y0 + 9),
-       "File SQL — Query Editor", font=mono_reg(15), fill=MUTED)
+d.text(
+    (mock_x0 + 100, mock_y0 + 9),
+    "File SQL — Query Editor",
+    font=mono_reg(15),
+    fill=MUTED,
+)
 
 # Tab strip
 tab_y0 = mock_y0 + tb_h
@@ -163,10 +180,10 @@ tab_w = 200
 d.rectangle((mock_x0, tab_y0, mock_x0 + tab_w, tab_y0 + tab_h), fill=SURFACE)
 d.rectangle((mock_x0, tab_y0, mock_x0 + tab_w, tab_y0 + 2), fill=ACCENT)
 d.line((mock_x0 + tab_w, tab_y0, mock_x0 + tab_w, tab_y0 + tab_h), fill=BORDER)
-d.text((mock_x0 + 18, tab_y0 + 8), "File SQL — Query Editor",
-       font=mono_reg(15), fill=TEXT)
-d.text((mock_x0 + tab_w - 22, tab_y0 + 6), "×",
-       font=mono_reg(18), fill=MUTED)
+d.text(
+    (mock_x0 + 18, tab_y0 + 8), "File SQL — Query Editor", font=mono_reg(15), fill=TEXT
+)
+d.text((mock_x0 + tab_w - 22, tab_y0 + 6), "×", font=mono_reg(18), fill=MUTED)
 
 # Editor body — code font sized so the widest line fits inside the card
 ed_y0 = tab_y0 + tab_h + 18
@@ -178,8 +195,14 @@ line_h = 26
 
 sql_lines = [
     [("-- Top regions by revenue, 2026", COMMENT)],
-    [("SELECT", KEYWORD), (" region, ", TEXT), ("SUM", FN),
-     ("(revenue) ", TEXT), ("AS", KEYWORD), (" total", TEXT)],
+    [
+        ("SELECT", KEYWORD),
+        (" region, ", TEXT),
+        ("SUM", FN),
+        ("(revenue) ", TEXT),
+        ("AS", KEYWORD),
+        (" total", TEXT),
+    ],
     [("FROM", KEYWORD), (" sales", TEXT)],
     [("WHERE", KEYWORD), (" year = ", TEXT), ("2026", NUM)],
     [("GROUP BY", KEYWORD), (" region", TEXT)],
@@ -188,8 +211,7 @@ sql_lines = [
 
 for i, segments in enumerate(sql_lines):
     ly = ed_y0 + i * line_h
-    d.text((gutter_x, ly + 2), str(i + 1),
-           font=ln_font, fill=(74, 83, 97))
+    d.text((gutter_x, ly + 2), str(i + 1), font=ln_font, fill=(74, 83, 97))
     cx = code_x
     for text, color in segments:
         d.text((cx, ly), text, font=code_font, fill=color)
@@ -204,20 +226,29 @@ d.line((pad, foot_top, W - pad, foot_top), fill=BORDER)
 
 mark_x = pad
 mark_y = foot_top + 22
-d.rounded_rectangle((mark_x, mark_y, mark_x + 44, mark_y + 52),
-                    radius=6, fill=SURFACE_2, outline=BORDER, width=1)
-d.polygon([(mark_x + 36, mark_y), (mark_x + 44, mark_y),
-           (mark_x + 44, mark_y + 8)], fill=ACCENT)
-d.rounded_rectangle((mark_x + 6, mark_y + 32, mark_x + 38, mark_y + 46),
-                    radius=3, fill=DUCKDB)
-d.text((mark_x + 10, mark_y + 33), "SQL",
-       font=mono_bold(11), fill=INK)
+d.rounded_rectangle(
+    (mark_x, mark_y, mark_x + 44, mark_y + 52),
+    radius=6,
+    fill=SURFACE_2,
+    outline=BORDER,
+    width=1,
+)
+d.polygon(
+    [(mark_x + 36, mark_y), (mark_x + 44, mark_y), (mark_x + 44, mark_y + 8)],
+    fill=ACCENT,
+)
+d.rounded_rectangle(
+    (mark_x + 6, mark_y + 32, mark_x + 38, mark_y + 46), radius=3, fill=DUCKDB
+)
+d.text((mark_x + 10, mark_y + 33), "SQL", font=mono_bold(11), fill=INK)
 
-d.text((mark_x + 58, mark_y + 4), "File SQL",
-       font=mono_bold(26), fill=TEXT)
-d.text((mark_x + 58, mark_y + 34),
-       "arunkumar1997.github.io/vscode-sql-files",
-       font=mono_reg(15), fill=MUTED)
+d.text((mark_x + 58, mark_y + 4), "File SQL", font=mono_bold(26), fill=TEXT)
+d.text(
+    (mark_x + 58, mark_y + 34),
+    "arunkumar1997.github.io/vscode-sql-files",
+    font=mono_reg(15),
+    fill=MUTED,
+)
 
 # DuckDB pill on the right
 pill_txt = "Powered by DuckDB"
@@ -228,16 +259,24 @@ pill_x1 = W - pad
 pill_x0 = pill_x1 - pw - ppx * 2 - 20
 pill_y0 = mark_y + 12
 pill_y1 = pill_y0 + ph + ppy * 2 + 2
-d.rounded_rectangle((pill_x0, pill_y0, pill_x1, pill_y1),
-                    radius=999,
-                    fill=(255, 240, 0, 24),
-                    outline=(255, 240, 0, 100), width=1)
+d.rounded_rectangle(
+    (pill_x0, pill_y0, pill_x1, pill_y1),
+    radius=999,
+    fill=(255, 240, 0, 24),
+    outline=(255, 240, 0, 100),
+    width=1,
+)
 dot_r = 5
 mid = (pill_y0 + pill_y1) // 2
-d.ellipse((pill_x0 + 14, mid - dot_r,
-           pill_x0 + 14 + dot_r * 2, mid + dot_r), fill=DUCKDB)
-d.text((pill_x0 + 14 + dot_r * 2 + 8, pill_y0 + ppy - 2),
-       pill_txt, font=pill_font, fill=DUCKDB)
+d.ellipse(
+    (pill_x0 + 14, mid - dot_r, pill_x0 + 14 + dot_r * 2, mid + dot_r), fill=DUCKDB
+)
+d.text(
+    (pill_x0 + 14 + dot_r * 2 + 8, pill_y0 + ppy - 2),
+    pill_txt,
+    font=pill_font,
+    fill=DUCKDB,
+)
 
 # ---------------------------------------------------------------------------
 # 5. Save
