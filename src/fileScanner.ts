@@ -13,6 +13,18 @@ const SUPPORTED_EXTENSIONS: Record<string, FileType> = {
   ".log": "text",
 };
 
+const HIVE_PARTITION_SEGMENT = /^[A-Za-z_][A-Za-z0-9_]*=.+$/;
+
+interface FileGroup {
+  fileType: FileType;
+  ext: string;
+}
+
+interface HivePartitionRoot {
+  path: string;
+  groups: FileGroup[];
+}
+
 export function detectFileType(filePath: string): FileType | null {
   const ext = path.extname(filePath).toLowerCase();
   return SUPPORTED_EXTENSIONS[ext] ?? null;
@@ -85,9 +97,30 @@ export function scanFolder(folderPath: string): TableEntry[] {
   const entries: TableEntry[] = [];
   const names = new Set<string>();
 
+  const hiveRoots = findHivePartitionRoots(folderPath);
+  for (const hiveRoot of hiveRoots) {
+    const dirName = path.basename(hiveRoot.path);
+    const isSingleGroup = hiveRoot.groups.length === 1;
+    for (const { fileType, ext } of hiveRoot.groups) {
+      const baseName = isSingleGroup
+        ? sanitizeName(dirName)
+        : sanitizeName(`${dirName}_${ext.slice(1)}`);
+      entries.push({
+        name: uniqueName(baseName, names),
+        filePath: path.join(hiveRoot.path, "**", `*${ext}`),
+        fileType,
+        isS3: false,
+        hivePartitioning: true,
+      });
+    }
+  }
+
   for (const [dir, files] of dirMap) {
+    if (hiveRoots.some((hiveRoot) => isInsideDirectory(dir, hiveRoot.path))) {
+      continue;
+    }
     // Group by (fileType, ext) so each distinct extension is one glob pattern.
-    const groups = new Map<string, { fileType: FileType; ext: string }>();
+    const groups = new Map<string, FileGroup>();
     for (const { fileType, ext } of files) {
       const key = `${fileType}:${ext}`;
       if (!groups.has(key)) {
@@ -105,12 +138,7 @@ export function scanFolder(folderPath: string): TableEntry[] {
         ? sanitizeName(dirName)
         : sanitizeName(`${dirName}_${ext.slice(1)}`);
 
-      let name = baseName;
-      let suffix = 1;
-      while (names.has(name)) {
-        name = `${baseName}_${suffix++}`;
-      }
-      names.add(name);
+      const name = uniqueName(baseName, names);
 
       // DuckDB's read_* functions natively support glob patterns, so passing
       // "/path/to/dir/*.parquet" reads all matching files as one table.
@@ -120,6 +148,112 @@ export function scanFolder(folderPath: string): TableEntry[] {
   }
 
   return entries;
+}
+
+/**
+ * Find top-level folders whose supported files are stored below one or more
+ * Hive-style key=value directory segments. Nested roots are omitted when their
+ * ancestor is already a valid Hive dataset.
+ */
+function findHivePartitionRoots(folderPath: string): HivePartitionRoot[] {
+  const candidates: HivePartitionRoot[] = [];
+
+  function inspect(candidate: string): void {
+    const groups = getHivePartitionFileGroups(candidate);
+    if (groups) {
+      candidates.push({ path: candidate, groups });
+      return;
+    }
+
+    let items: string[];
+    try {
+      items = fs.readdirSync(candidate);
+    } catch {
+      return;
+    }
+    for (const item of items) {
+      if (item.startsWith(".")) {
+        continue;
+      }
+      const child = path.join(candidate, item);
+      try {
+        if (fs.statSync(child).isDirectory()) {
+          inspect(child);
+        }
+      } catch {
+        // Ignore entries that disappear or cannot be read while scanning.
+      }
+    }
+  }
+
+  inspect(folderPath);
+  return candidates;
+}
+
+function getHivePartitionFileGroups(root: string): FileGroup[] | null {
+  let valid = true;
+  const groups = new Map<string, FileGroup>();
+
+  function walkHive(dir: string, partitionDepth: number): void {
+    let items: string[];
+    try {
+      items = fs.readdirSync(dir);
+    } catch {
+      valid = false;
+      return;
+    }
+
+    for (const item of items) {
+      if (item.startsWith(".")) {
+        continue;
+      }
+      const full = path.join(dir, item);
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(full);
+      } catch {
+        valid = false;
+        continue;
+      }
+
+      if (stat.isDirectory()) {
+        if (!HIVE_PARTITION_SEGMENT.test(item)) {
+          valid = false;
+          continue;
+        }
+        walkHive(full, partitionDepth + 1);
+      } else {
+        const fileType = SUPPORTED_EXTENSIONS[path.extname(full).toLowerCase()];
+        if (!fileType) {
+          continue;
+        }
+        if (partitionDepth === 0) {
+          valid = false;
+          continue;
+        }
+        const ext = path.extname(full).toLowerCase();
+        groups.set(`${fileType}:${ext}`, { fileType, ext });
+      }
+    }
+  }
+
+  walkHive(root, 0);
+  return valid && groups.size > 0 ? Array.from(groups.values()) : null;
+}
+
+function isInsideDirectory(dir: string, parent: string): boolean {
+  const relative = path.relative(parent, dir);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function uniqueName(baseName: string, names: Set<string>): string {
+  let name = baseName;
+  let suffix = 1;
+  while (names.has(name)) {
+    name = `${baseName}_${suffix++}`;
+  }
+  names.add(name);
+  return name;
 }
 
 export function entryFromLocalFile(filePath: string): TableEntry | null {

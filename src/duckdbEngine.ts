@@ -34,6 +34,7 @@ export class DuckDBEngine {
       entry.name,
       entry.filePath,
       entry.fileType,
+      entry.hivePartitioning,
     );
     log(`Registering table "${entry.name}" from ${entry.filePath}`);
     await this.exec(viewSql);
@@ -52,6 +53,7 @@ export class DuckDBEngine {
       entry.name,
       entry.filePath,
       entry.fileType,
+      entry.hivePartitioning,
     );
     await this.exec(viewSql);
   }
@@ -133,20 +135,27 @@ export class DuckDBEngine {
     return { columns, rows: sanitized, rowCount: sanitized.length, truncated };
   }
 
-  private buildViewSql(name: string, path: string, type: FileType): string {
+  private buildViewSql(
+    name: string,
+    path: string,
+    type: FileType,
+    hivePartitioning = false,
+  ): string {
     let readExpr: string;
     switch (type) {
       case "csv":
-        readExpr = `read_csv('${path}', AUTO_DETECT=TRUE)`;
+        readExpr = `read_csv('${path}', AUTO_DETECT=TRUE${hivePartitioning ? ", hive_partitioning=true" : ""})`;
         break;
       case "json":
-        readExpr = `read_json_auto('${path}')`;
+        readExpr = `read_json_auto('${path}'${hivePartitioning ? ", hive_partitioning=true" : ""})`;
         break;
       case "parquet":
-        readExpr = `read_parquet('${path}')`;
+        readExpr = hivePartitioning
+          ? `read_parquet('${path}', hive_partitioning=true)`
+          : `read_parquet('${path}')`;
         break;
       case "text":
-        readExpr = `read_csv('${path}', DELIM='\n', COLUMNS={'line':'VARCHAR'})`;
+        readExpr = `read_csv('${path}', HEADER=FALSE, COLUMNS={'line':'VARCHAR'}${hivePartitioning ? ", hive_partitioning=true" : ""})`;
         break;
     }
     return `CREATE OR REPLACE VIEW "${name}" AS SELECT * FROM ${readExpr}`;

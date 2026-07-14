@@ -7,6 +7,8 @@ export interface TableEntry {
   isS3: boolean;
   sourceUri?: string;     // original s3:// URI shown in UI
   columns?: ColumnInfo[];
+  /** Enable DuckDB's extraction of key=value directory segments as columns. */
+  hivePartitioning?: boolean;
 }
 
 export interface ColumnInfo {

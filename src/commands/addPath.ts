@@ -7,8 +7,11 @@ import {
   detectBucketRegion,
   downloadS3Entries,
   downloadS3Folder,
+  downloadS3HiveFolder,
+  findHivePartitionPrefixes,
   getConfig,
   groupKeysByLeafPrefix,
+  groupS3KeysByFileType,
   listS3Keys,
   parseS3Uri,
   resolveAwsCredentials,
@@ -238,10 +241,36 @@ async function handleS3Path(
             );
             return;
           }
-          // Group keys by leaf directory — each subfolder becomes its own table,
-          // mirroring the local scanFolder behaviour.
-          const leafGroups = groupKeysByLeafPrefix(keys);
           entries = [];
+          const hivePrefixes = findHivePartitionPrefixes(keys, parsed.prefix);
+          const hiveKeys = new Set<string>();
+          for (const hivePrefix of hivePrefixes) {
+            const partitionKeys = keys.filter((key) => key.startsWith(hivePrefix));
+            partitionKeys.forEach((key) => hiveKeys.add(key));
+            const fileGroups = groupS3KeysByFileType(partitionKeys);
+            const includeExtensionInName = fileGroups.length > 1;
+            for (const group of fileGroups) {
+              const entry = await downloadS3HiveFolder(
+                parsed.bucket,
+                hivePrefix,
+                group.keys,
+                creds,
+                region,
+                progress,
+                group.fileType,
+                group.ext,
+                includeExtensionInName,
+              );
+              if (entry) {
+                entries.push(entry);
+              }
+            }
+          }
+
+          // Non-Hive data keeps the existing leaf-folder grouping behaviour.
+          const leafGroups = groupKeysByLeafPrefix(
+            keys.filter((key) => !hiveKeys.has(key)),
+          );
           for (const [leafPrefix, leafKeys] of leafGroups) {
             const entry = await downloadS3Folder(
               parsed.bucket,
@@ -255,6 +284,7 @@ async function handleS3Path(
               entries.push(entry);
             }
           }
+          makeEntryNamesUnique(entries);
         } else {
           // Single file — key is the prefix without trailing slash
           entries = await downloadS3Entries(
@@ -289,6 +319,20 @@ async function handleS3Path(
       }
     },
   );
+}
+
+function makeEntryNamesUnique(entries: TableEntry[]): void {
+  const names = new Set<string>();
+  for (const entry of entries) {
+    const baseName = entry.name;
+    let name = baseName;
+    let suffix = 1;
+    while (names.has(name)) {
+      name = `${baseName}_${suffix++}`;
+    }
+    names.add(name);
+    entry.name = name;
+  }
 }
 
 async function handleLocalPath(
