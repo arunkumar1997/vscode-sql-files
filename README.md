@@ -70,6 +70,8 @@ This works at any depth — only the **last subfolder** name is used as the tabl
 - Tabular results displayed directly below the editor
 - Row count shown in the toolbar
 - Truncation warning when results exceed the configured `maxResultRows` limit
+- **Export CSV** and **Export Parquet** rerun the active query and write the full result, including rows beyond the visible limit
+- Run custom DuckDB `COPY` or export statements directly in the editor for format-specific options; these statements are not limited by `maxResultRows`
 - **Alt+Click** any header or cell to copy its value to the clipboard
 - Complex column types (timestamps, structs, arrays, nested JSON) are displayed as readable strings instead of `[object Object]`
 
@@ -140,13 +142,28 @@ GROUP BY region
 ORDER BY total_revenue DESC;
 ```
 
+Use **Export CSV** or **Export Parquet** in the toolbar to save the complete result. For custom DuckDB export options, run a `COPY` statement directly:
+
+```sql
+COPY (
+    SELECT * FROM sales ORDER BY id
+) TO '/data/sales-export.csv' (
+    FORMAT CSV,
+    HEADER true,
+    DELIMITER '|',
+    NULL 'N/A'
+);
+```
+
+Custom `COPY` statements execute unchanged, so the file contains the full query result even when the results grid is capped by `fileSql.maxResultRows`.
+
 ---
 
 ## 💡 Tips
 
 - **Filter early** — use `WHERE` to reduce the data DuckDB processes
 - **Prefer Parquet** — columnar format is significantly faster than CSV for large datasets
-- **Adjust row limit** — increase `fileSql.maxResultRows` if you need to see more results
+- **Keep the grid responsive** — leave `fileSql.maxResultRows` bounded and use toolbar export or a custom `COPY` statement for complete output
 - **Hive partitions stay together** — point to a Hive-style partitioned folder and File SQL registers it as one queryable table, preserving the partition hierarchy for DuckDB
 - **Alt+Click cells** — quickly copy any value from the results grid
 
@@ -211,7 +228,6 @@ E2E tests require a display server. On CI or headless Linux use `xvfb-run -a npm
 
 ## 🗺️ Roadmap
 
-- [ ] Query result export (CSV, JSON, Parquet)
 - [ ] Saved queries and query history persistence
 - [ ] Data visualization (charts and graphs)
 - [ ] Additional file formats (Excel, Avro, SQLite)

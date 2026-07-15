@@ -3,7 +3,6 @@ import { isQueryEditorOpen } from "./openQueryEditor";
 import { DuckDBEngine } from "../duckdbEngine";
 import { TableRegistry } from "../tableRegistry";
 import { scanFolder } from "../fileScanner";
-import { TableEntry } from "../types";
 
 export async function addFolder(
   registry: TableRegistry,

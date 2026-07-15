@@ -1,6 +1,29 @@
-import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import { ColumnInfo, FileType, QueryResult, TableEntry } from "./types";
+import { DuckDBInstance, DuckDBConnection, StatementType } from "@duckdb/node-api";
+import { ColumnInfo, ExportFormat, FileType, QueryResult, TableEntry } from "./types";
 import { log, logError } from "./logger";
+
+/** Escape a string for use inside a SQL single-quoted literal. */
+function escapeSqlString(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+/**
+ * Statement types that produce row output and can be wrapped in
+ * SELECT * FROM (...) LIMIT N for maxRows enforcement.
+ */
+const WRAPPABLE_ROW_TYPES = new Set<StatementType>([
+  StatementType.SELECT,   // includes VALUES, SHOW, DESCRIBE, PRAGMA→SELECT
+]);
+
+/**
+ * Statement types that produce row output but CANNOT be subqueried.
+ * These are executed directly and the result array is truncated.
+ */
+const DIRECT_ROW_TYPES = new Set<StatementType>([
+  StatementType.EXPLAIN,
+  StatementType.CALL,
+  StatementType.RELATION,
+]);
 
 export class DuckDBEngine {
   private instance!: DuckDBInstance;
@@ -62,8 +85,53 @@ export class DuckDBEngine {
     log(
       `Executing query: ${sql.substring(0, 100)}${sql.length > 100 ? "..." : ""}`,
     );
-    const wrapped = `SELECT * FROM (${sql.replace(/;+\s*$/, "")}) __q LIMIT ${maxRows + 1}`;
-    const reader = await this.conn.runAndReadAll(wrapped);
+
+    const trimmed = sql.replace(/;+\s*$/, "");
+
+    // Reject multiple statements to prevent surprising trailing execution.
+    const extracted = await this.conn.extractStatements(trimmed);
+    if (extracted.count > 1) {
+      throw new Error(
+        `Multiple statements are not supported. Found ${extracted.count} statements; please run one statement at a time.`,
+      );
+    }
+
+    // Use DuckDB's prepared-statement metadata to classify the statement
+    // without executing it. This replaces the keyword-based allowlist with
+    // a generic, DuckDB-native mechanism.
+    const prepared = await this.conn.prepare(trimmed);
+    const stmtType = prepared.statementType;
+    prepared.destroySync();
+
+    // Wrappable row-producing statements (SELECT, VALUES, SHOW, DESCRIBE, PRAGMA):
+    // wrap in SELECT * FROM (...) LIMIT N for efficient server-side truncation.
+    if (WRAPPABLE_ROW_TYPES.has(stmtType)) {
+      const wrapped = `SELECT * FROM (${trimmed}) __q LIMIT ${maxRows + 1}`;
+      return this.executeAndSerialize(wrapped, maxRows);
+    }
+
+    // Non-wrappable row-producing statements (EXPLAIN, CALL, RELATION):
+    // execute directly but apply maxRows truncation on the result array.
+    if (DIRECT_ROW_TYPES.has(stmtType)) {
+      return this.executeAndSerialize(trimmed, maxRows);
+    }
+
+    // All other statements (COPY, CREATE, DROP, ALTER, INSERT, UPDATE,
+    // DELETE, SET, LOAD, ATTACH, DETACH, EXPORT, VACUUM, etc.):
+    // execute directly and return empty result.
+    await this.exec(trimmed);
+    return { columns: [], rows: [], rowCount: 0, truncated: false };
+  }
+
+  /**
+   * Run a SQL query, read all results, serialize values for postMessage,
+   * and enforce maxRows truncation.
+   */
+  private async executeAndSerialize(
+    sql: string,
+    maxRows: number,
+  ): Promise<QueryResult> {
+    const reader = await this.conn.runAndReadAll(sql);
     const allRows = reader.getRowObjects() as Record<string, unknown>[];
     const truncated = allRows.length > maxRows;
     const sliced = truncated ? allRows.slice(0, maxRows) : allRows;
@@ -135,6 +203,20 @@ export class DuckDBEngine {
     return { columns, rows: sanitized, rowCount: sanitized.length, truncated };
   }
 
+  async exportQuery(
+    sql: string,
+    destination: string,
+    format: ExportFormat,
+  ): Promise<void> {
+    const trimmed = sql.replace(/;+\s*$/, "");
+    const escapedDest = escapeSqlString(destination);
+    const formatOption = format === "parquet" ? "PARQUET" : "CSV, HEADER";
+    const copySql = `COPY (${trimmed}) TO '${escapedDest}' (FORMAT ${formatOption})`;
+    log(`Exporting query to ${format}: ${destination}`);
+    await this.exec(copySql);
+    log(`Export complete: ${destination}`);
+  }
+
   private buildViewSql(
     name: string,
     path: string,
@@ -186,6 +268,8 @@ export class DuckDBEngine {
   dispose(): void {
     try {
       this.conn?.closeSync();
-    } catch {}
+    } catch {
+      // Disposal is best-effort during extension shutdown and test cleanup.
+    }
   }
 }

@@ -3,7 +3,8 @@ import "./styles.css";
 import { QueryEditor } from "./components/QueryEditor";
 import { ResultsTable } from "./components/ResultsTable";
 import { Toolbar } from "./components/Toolbar";
-import { QueryResult, TableEntry } from "../types";
+import { ExportFormat, QueryResult, TableEntry } from "../types";
+import { isSuccessStatus, formatExportStatus } from "./exportHelpers";
 
 declare const acquireVsCodeApi: () => {
   postMessage: (msg: unknown) => void;
@@ -18,6 +19,9 @@ interface TabState {
   result: QueryResult | null;
   error: string | null;
   running: boolean;
+  exporting: boolean;
+  exportStatus: string | null;
+  exportError: string | null;
 }
 
 let _tabSeq = 1;
@@ -30,6 +34,9 @@ function createTab(): TabState {
     result: null,
     error: null,
     running: false,
+    exporting: false,
+    exportStatus: null,
+    exportError: null,
   };
 }
 
@@ -70,11 +77,11 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                  ...t,
-                  result: msg.payload as QueryResult,
-                  error: null,
-                  running: false,
-                }
+                    ...t,
+                    result: msg.payload as QueryResult,
+                    error: null,
+                    running: false,
+                  }
                 : t,
             ),
           );
@@ -84,11 +91,42 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                  ...t,
-                  error: (msg.payload as { message: string }).message,
-                  result: null,
-                  running: false,
-                }
+                    ...t,
+                    error: (msg.payload as { message: string }).message,
+                    result: null,
+                    running: false,
+                  }
+                : t,
+            ),
+          );
+          break;
+        case "exportResult":
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === msg.tabId
+                ? {
+                    ...t,
+                    exporting: false,
+                    exportStatus: formatExportStatus(
+                      (msg.payload as { format: ExportFormat }).format,
+                      (msg.payload as { path: string }).path,
+                    ),
+                    exportError: null,
+                  }
+                : t,
+            ),
+          );
+          break;
+        case "exportError":
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === msg.tabId
+                ? {
+                    ...t,
+                    exporting: false,
+                    exportStatus: null,
+                    exportError: (msg.payload as { message: string }).message,
+                  }
                 : t,
             ),
           );
@@ -150,6 +188,20 @@ export function App(): JSX.Element {
     }
   }
 
+  function handleExport(format: ExportFormat): void {
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === activeTabId
+          ? { ...t, exporting: true, exportStatus: null, exportError: null }
+          : t,
+      ),
+    );
+    vscode.postMessage({
+      type: "exportResults",
+      payload: { tabId: activeTabId, format },
+    });
+  }
+
   function handleSqlChange(tabId: string, sql: string): void {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, sql } : t)));
   }
@@ -203,7 +255,7 @@ export function App(): JSX.Element {
   /** Get or create a stable runRef for a given tab */
   function getRunRef(tabId: string): React.MutableRefObject<() => void> {
     if (!runRefs.current.has(tabId)) {
-      runRefs.current.set(tabId, { current: () => { } });
+      runRefs.current.set(tabId, { current: () => {} });
     }
     return runRefs.current.get(tabId)!;
   }
@@ -252,11 +304,15 @@ export function App(): JSX.Element {
         </button>
       </div>
 
-      {/* ── Toolbar (run button + row count) ── */}
+      {/* ── Toolbar (run button + row count + export) ── */}
       <Toolbar
         onRun={handleRun}
+        onExport={handleExport}
         running={activeTab.running}
+        exporting={activeTab.exporting}
         result={activeTab.result}
+        exportStatus={activeTab.exportStatus}
+        exportError={activeTab.exportError}
       />
 
       {/* ── Editors (all mounted; non-active hidden) ── */}
@@ -273,7 +329,6 @@ export function App(): JSX.Element {
               tables={tables}
               onRun={(sql) => handleRunSql(tab.id, sql)}
               onChange={(sql) => handleSqlChange(tab.id, sql)}
-              running={tab.running}
               initialDoc={tab.sql}
               runRef={getRunRef(tab.id)}
             />
@@ -288,6 +343,8 @@ export function App(): JSX.Element {
       <div className="results-panel">
         {activeTab.error ? (
           <div className="error-banner">{activeTab.error}</div>
+        ) : isSuccessStatus(activeTab.result) ? (
+          <div className="success-banner">Statement executed successfully.</div>
         ) : (
           <ResultsTable result={activeTab.result} />
         )}

@@ -99,7 +99,6 @@ export interface Props {
   tables: TableEntry[];
   onRun: (sql: string) => void;
   onChange: (sql: string) => void;
-  running: boolean;
   initialDoc?: string;
   /** Populated by the editor with a function that returns the selected text
    *  (or full doc if nothing is selected) and triggers onRun. */
@@ -110,7 +109,6 @@ export function QueryEditor({
   tables,
   onRun,
   onChange,
-  running,
   initialDoc = "SELECT *\nFROM ",
   runRef,
 }: Props): JSX.Element {

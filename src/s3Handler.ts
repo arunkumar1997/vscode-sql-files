@@ -32,7 +32,9 @@ export function cleanupTempDir(): void {
   if (_tempDir) {
     try {
       fs.rmSync(_tempDir, { recursive: true, force: true });
-    } catch {}
+    } catch {
+      // Temp cleanup is best-effort during extension shutdown.
+    }
     _tempDir = undefined;
   }
 }
@@ -147,7 +149,6 @@ export async function downloadS3File(
   const resp = await client.send(
     new GetObjectCommand({ Bucket: bucket, Key: key }),
   );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await pipeline(resp.Body as any, createWriteStream(destPath));
 }
 
