@@ -362,3 +362,49 @@ body {
   opacity: 0.5;
   font-size: 13px;
 }
+
+/* ── Export & toolbar extras ── */
+.toolbar-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.toolbar-export-btn {
+  background: transparent !important;
+  color: var(--fg) !important;
+  border: 1px solid var(--border) !important;
+  padding: 3px 10px !important;
+  font-size: 12px !important;
+}
+.toolbar-export-btn:hover:not(:disabled) {
+  background: var(--btn-bg) !important;
+  color: var(--btn-fg) !important;
+  border-color: var(--btn-bg) !important;
+}
+.toolbar-export-btn:disabled {
+  opacity: 0.35 !important;
+  cursor: default !important;
+}
+
+.export-status {
+  font-size: 11px;
+  color: var(--vscode-terminal-ansiGreen, #89d185);
+  margin-left: 4px;
+}
+
+.export-error {
+  font-size: 11px;
+  color: var(--error-fg);
+  margin-left: 4px;
+}
+
+.success-banner {
+  padding: 10px 12px;
+  color: var(--vscode-terminal-ansiGreen, #89d185);
+  background: color-mix(in srgb, var(--vscode-terminal-ansiGreen, #89d185) 10%, var(--bg));
+  border-left: 3px solid var(--vscode-terminal-ansiGreen, #89d185);
+  margin: 8px;
+  font-size: 13px;
+}

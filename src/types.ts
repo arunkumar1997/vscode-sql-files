@@ -26,13 +26,18 @@ export interface QueryResult {
 }
 
 export interface WebviewMessage {
-  type: "runQuery" | "tablesChanged" | "queryResult" | "queryError" | "ready";
+  type: "runQuery" | "exportResults" | "tablesChanged" | "queryResult" | "queryError" | "exportResult" | "exportError" | "ready";
   payload?: unknown;
 }
 
 export interface RunQueryMessage extends WebviewMessage {
   type: "runQuery";
   payload: { sql: string };
+}
+
+export interface ExportResultsMessage extends WebviewMessage {
+  type: "exportResults";
+  payload: { tabId: string; format: string };
 }
 
 export interface TablesChangedMessage extends WebviewMessage {
@@ -47,5 +52,15 @@ export interface QueryResultMessage extends WebviewMessage {
 
 export interface QueryErrorMessage extends WebviewMessage {
   type: "queryError";
+  payload: { message: string };
+}
+
+export interface ExportResultMessage extends WebviewMessage {
+  type: "exportResult";
+  payload: { path: string; format: ExportFormat };
+}
+
+export interface ExportErrorMessage extends WebviewMessage {
+  type: "exportError";
   payload: { message: string };
 }

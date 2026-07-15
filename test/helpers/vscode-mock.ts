@@ -42,6 +42,7 @@ export const Uri = {
 export const window = {
   showInputBox: vi.fn(),
   showOpenDialog: vi.fn(),
+  showSaveDialog: vi.fn(),
   showQuickPick: vi.fn(),
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),

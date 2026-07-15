@@ -4,7 +4,7 @@
 | --- | --- | --- | --- |
 | 0. Prioritization and plan | Remy | Done | Team debate completed; issue #4 selected |
 | 1. Engine contract | Sage | Done | RED 3 failures → GREEN 20/20 focused, full suite 140/140 |
-| 2. Extension/webview flow | Nova + Milo | Blocked | Waits for Phase 1 API contract |
+| 2. Extension/webview flow | Nova + Milo | Done | RED 6 failures → GREEN 7/7 focused, full suite 157/157 |
 | 3. QA sign-off | Ivy | Blocked | Waits for implementation |
 
 ## TDD Log
@@ -70,3 +70,63 @@ DuckDB API limitation: `columnCount` is unreliable for classification (returns 1
 
 - [#4](https://github.com/arunkumar1997/vscode-sql-files/issues/4) - sprint scope
 - [#8](https://github.com/arunkumar1997/vscode-sql-files/issues/8) - deferred; do not mix into this feature branch
+
+### Phase 2 — Extension/Webview flow (Nova + Milo)
+
+**RED command:**
+```
+npx vitest run --config vitest.integration.config.ts test/integration/command-exportResults.test.ts
+npx vitest run test/unit/exportHelpers.test.ts
+```
+
+**RED failures (6/7 integration, 1/1 unit suite):**
+- Integration: `showSaveDialog` not defined on vscode mock → `TypeError: Cannot read properties of undefined`
+- Integration: `exportResults` message type not handled → no `exportResult`/`exportError` posted
+- Integration: format validation not implemented → no `exportError` for invalid format
+- Integration: `tabSqlMap` not tracking original SQL per tab → no SQL for export
+- Unit: `exportHelpers` module not found → `Cannot find module '../../src/webview/exportHelpers'`
+
+**GREEN changes:**
+- `test/helpers/vscode-mock.ts`: added `showSaveDialog: vi.fn()` to window mock
+- `src/types.ts`: added `ExportResultsMessage`, `ExportResultMessage`, `ExportErrorMessage` types; extended `WebviewMessage.type` union
+- `src/commands/openQueryEditor.ts`:
+  - Added `tabSqlMap: Map<string, string>` to track original SQL per tab
+  - Stores SQL in `tabSqlMap` on every `runQuery` before execution
+  - Added `exportResults` message handler: validates format → shows save dialog → calls `engine.exportQuery()` → posts `exportResult`/`exportError`
+  - Format validation rejects unsupported formats before opening dialog
+  - Cancellation (no URI from dialog) returns silently without error
+  - Clears `tabSqlMap` on panel dispose
+- `src/webview/exportHelpers.ts`: new pure module with `isExportEnabled()`, `isSuccessStatus()`, `formatExportStatus()` — no DOM/Node deps, testable in both environments
+- `src/webview/components/Toolbar.tsx`: added "Export CSV" and "Export Parquet" buttons; disabled when no row result, running, or exporting; truncated-result tooltip explains full-query re-execution
+- `src/webview/App.tsx`:
+  - Extended `TabState` with `exporting`, `exportStatus`, `exportError` fields (per-tab isolation)
+  - Added `handleExport()` → posts `exportResults` message
+  - Added `exportResult`/`exportError` message handlers
+  - Non-row result (COPY, CREATE, etc.) shows "Statement executed successfully" banner instead of misleading "0 rows"
+- `src/webview/styles.css`: added `.toolbar-separator`, `.toolbar-export-btn`, `.export-status`, `.export-error`, `.success-banner` styles using existing VS Code CSS variables
+
+**GREEN result:** 7/7 focused integration tests pass, 10/10 unit tests pass.
+
+**Full suite:** 113 unit + 44 integration = 157/157 pass. Webview typecheck (`tsc -p tsconfig.webview.json --noEmit`), compile, and build clean.
+
+### UX Behavior
+
+1. **Export buttons** appear in the toolbar after a successful row-producing query. Two separate buttons: "Export CSV" and "Export Parquet". Buttons are disabled (greyed out, 35% opacity) when:
+   - No result yet
+   - Query is running
+   - Export is in progress
+   - Result is a non-row statement (0 rows, 0 columns)
+
+2. **Truncated results tooltip**: When results are truncated, export buttons show tooltip: "Export reruns the original query and exports all rows, not only the visible truncated subset."
+
+3. **Export flow**: Click button → extension opens native save dialog with format-specific filter and default extension → engine writes full result via `COPY` → toolbar shows green "Exported as CSV: filename.csv" status.
+
+4. **Error handling**: Export failures show inline red error text in toolbar. Invalid format rejected before dialog opens.
+
+5. **Non-row commands** (COPY, CREATE, DROP, etc.): Results panel shows green "Statement executed successfully" banner instead of misleading "Query returned 0 rows".
+
+6. **Custom COPY passthrough**: User-authored `COPY (SELECT ...) TO '...' (FORMAT CSV, HEADER)` passes through `runQuery` unchanged via Phase 1 engine classification. No maxRows wrapping. Success shows "Statement executed successfully" banner. File is written by DuckDB directly.
+
+### Deviations
+
+- None. All plan requirements met.
