@@ -66,3 +66,57 @@ Teams currently have to re-register the same tables/folders manually on every ma
 - [ ] Consider for Sprint 2 (post-landing-page sprint)
 
 ---
+
+### FB-002 — Query large Parquet files on S3 without downloading the whole thing
+
+- **Status:** 🆕 New
+- **Captured:** 2026-07-11
+- **Source:** Product Hunt launch comment
+- **Reporter:** _(PH username — fill in)_
+- **Type:** Architecture / Performance
+- **Priority:** High (blocks File SQL from being usable on large S3 datasets)
+
+**What they said**
+
+> How does this handle really large parquet files on S3 without downloading the whole thing first?
+
+**Current behaviour**
+
+File SQL uses a **download-first** architecture: S3 files are streamed to a local temp directory, then read by DuckDB. For a large Parquet file (say 10 GB), the user pays the full download cost before the first row is returned. This defeats one of Parquet's core value propositions — being cheap to query selectively.
+
+**The underlying need**
+
+Users querying large S3 Parquet datasets need Parquet's native benefits:
+- **Projection pushdown** — only the columns in `SELECT` are read
+- **Predicate pushdown** — only the row groups matching `WHERE` are read
+- **Range reads over HTTPS** — no full download, no local temp copy
+
+**Rough solution shape**
+
+- Adopt DuckDB's `httpfs` extension for S3 access instead of the current pre-download flow
+- Configure `httpfs` to use the same AWS credentials + region resolution we already have
+- Query S3 URIs directly: `read_parquet('s3://bucket/file.parquet')` becomes a range-read
+- Fall back to download-first for formats where streaming doesn't help (small CSV, JSON that must be fully parsed)
+
+**Open questions to resolve before scoping**
+
+- Which formats benefit from `httpfs` streaming (Parquet: big win; CSV/JSON: mixed)
+- How to keep AWS credential resolution consistent between `httpfs` and our current profile-based flow
+- Caching strategy — do we still cache anything locally, or fully stateless?
+- How to handle intermittent network errors mid-query (retry vs abort)
+- Impact on the "temp file cleanup on deactivate" logic currently in `s3Handler.ts`
+- Does `httpfs` respect `s3:GetBucketLocation` for auto region detection, or do we lose that?
+
+**Public reply posted on PH**
+
+> Honest answer — right now it downloads the file first, then queries locally. So for a big Parquet on S3, you'd pay the full download cost. Moving to DuckDB's httpfs extension (range-reads + column/predicate pushdown, no full download) is definitely the next step. Adding it to the roadmap.
+
+**Next actions**
+
+- [ ] File as GitHub Issue with `enhancement`, `roadmap`, `architecture` labels
+- [ ] Link the Issue back to this entry
+- [ ] Post the Issue link as a follow-up reply on the PH comment thread
+- [ ] Prioritise for Sprint 2 or Sprint 3 — likely higher priority than FB-001 because it affects real-world usability on large datasets
+- [ ] Consider updating README to clarify current S3 behaviour so users aren't surprised (transparency > silent limitation)
+
+---
