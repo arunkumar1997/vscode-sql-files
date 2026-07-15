@@ -1,5 +1,7 @@
 export type FileType = "csv" | "json" | "parquet" | "text";
 
+export type ExportFormat = "csv" | "parquet";
+
 export interface TableEntry {
   name: string;
   filePath: string;       // local path (or s3:// for non-downloaded entries)
