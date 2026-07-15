@@ -75,6 +75,31 @@
       {
         "command": "fileSql.openFileInSql",
         "title": "Open with File SQL"
+      },
+      {
+        "command": "fileSql.loadTable",
+        "title": "File SQL: Load Table",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "fileSql.loadAllTables",
+        "title": "File SQL: Load All Tables",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "fileSql.unloadTable",
+        "title": "File SQL: Unload Table",
+        "icon": "$(close)"
+      },
+      {
+        "command": "fileSql.reloadTable",
+        "title": "File SQL: Reload Table",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "fileSql.saveWorkspaceConfig",
+        "title": "File SQL: Save Workspace Configuration",
+        "icon": "$(save)"
       }
     ],
     "viewsContainers": {

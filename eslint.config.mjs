@@ -26,4 +26,17 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
+  {
+    files: ["test/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": ["warn"],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+    },
+  },
+  {
+    files: ["test/helpers/vscode-mock.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 );

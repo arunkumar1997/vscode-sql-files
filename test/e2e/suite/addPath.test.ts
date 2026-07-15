@@ -36,7 +36,7 @@ suite("addPath", () => {
       for (const entry of registry.getAll()) {
         try {
           await engine.dropTable(entry.name);
-        } catch {}
+        } catch { }
       }
       registry.clear();
     }
@@ -45,6 +45,9 @@ suite("addPath", () => {
   test("registers a CSV file and it appears in the registry", async () => {
     const registry = api.getRegistry()!;
     const engine = api.getEngine()!;
+
+    // Ensure engine is initialized (lazy init since activation no longer blocks on init)
+    await engine.ensureInitialized();
 
     const fixturesDir = path.resolve(__dirname, "../../../../test/fixtures");
     const csvPath = path.join(fixturesDir, "sales.csv");

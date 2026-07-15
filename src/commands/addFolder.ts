@@ -35,6 +35,14 @@ export async function addFolder(
       title: "File SQL: Loading folder…",
     },
     async (progress) => {
+      try {
+        await engine.ensureInitialized();
+      } catch (err: unknown) {
+        vscode.window.showErrorMessage(
+          `File SQL: DuckDB failed to initialize — ${(err as Error).message}`,
+        );
+        return;
+      }
       for (const entry of entries) {
         progress.report({ message: `Registering ${entry.name}…` });
         try {

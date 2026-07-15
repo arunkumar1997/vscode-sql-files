@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import path from "path";
 
 // --- EventEmitter ---
 export class EventEmitter<T = void> {
@@ -32,8 +33,7 @@ export const Uri = {
     }
   },
   joinPath: (base: { path: string; toString: () => string }, ...segments: string[]) => {
-    const { join } = require("path");
-    const joined = join(base.path, ...segments);
+    const joined = path.join(base.path, ...segments);
     return { scheme: "file", fsPath: joined, path: joined, toString: () => `file://${joined}` };
   },
 };
@@ -70,6 +70,14 @@ export const workspace = {
   })),
   workspaceFolders: [],
   onDidChangeConfiguration: vi.fn(),
+  fs: {
+    readFile: vi.fn().mockRejectedValue(Object.assign(new Error("File not found"), { code: "FileNotFound" })),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    createDirectory: vi.fn().mockResolvedValue(undefined),
+    rename: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    stat: vi.fn().mockRejectedValue(new Error("Not implemented")),
+  },
 };
 
 // --- commands ---
@@ -166,4 +174,27 @@ export class MockMemento {
     this.store.set(key, value);
     return Promise.resolve();
   }
+}
+
+// --- Typed mock helpers for tests ---
+export interface MockWorkspaceFs {
+  readFile: ReturnType<typeof vi.fn>;
+  writeFile: ReturnType<typeof vi.fn>;
+  createDirectory: ReturnType<typeof vi.fn>;
+  rename: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+}
+
+/** Replace workspace.fs with a typed mock. Returns the mock for assertion. */
+export function mockWorkspaceFs(overrides?: Partial<MockWorkspaceFs>): MockWorkspaceFs {
+  const mock: MockWorkspaceFs = {
+    readFile: vi.fn().mockRejectedValue(Object.assign(new Error("File not found"), { code: "FileNotFound" })),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    createDirectory: vi.fn().mockResolvedValue(undefined),
+    rename: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+  (workspace as { fs: MockWorkspaceFs }).fs = mock;
+  return mock;
 }

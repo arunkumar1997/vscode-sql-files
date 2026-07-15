@@ -2,9 +2,26 @@ import { DuckDBInstance, DuckDBConnection, StatementType } from "@duckdb/node-ap
 import { ColumnInfo, ExportFormat, FileType, QueryResult, TableEntry } from "./types";
 import { log, logError } from "./logger";
 
-/** Escape a string for use inside a SQL single-quoted literal. */
-function escapeSqlString(value: string): string {
+/**
+ * Escape a string for use inside a SQL single-quoted literal.
+ * Doubles all single-quote characters and rejects NUL bytes.
+ */
+export function escapeSqlString(value: string): string {
+  if (value.includes("\0")) {
+    throw new Error("SQL string literal cannot contain NUL bytes");
+  }
   return value.replace(/'/g, "''");
+}
+
+/**
+ * Escape an identifier for use as a DuckDB double-quoted identifier.
+ * Doubles all double-quote characters and rejects NUL bytes.
+ */
+export function escapeDuckDBIdentifier(name: string): string {
+  if (!name || name.includes("\0")) {
+    throw new Error("DuckDB identifier cannot be empty or contain NUL bytes");
+  }
+  return `"${name.replace(/"/g, '""')}"`;
 }
 
 /**
@@ -29,11 +46,30 @@ export class DuckDBEngine {
   private instance!: DuckDBInstance;
   private conn!: DuckDBConnection;
   private ready = false;
+  private initPromise: Promise<void> | undefined;
 
   async init(): Promise<void> {
     this.instance = await DuckDBInstance.create(":memory:");
     this.conn = await this.instance.connect();
     this.ready = true;
+  }
+
+  /**
+   * Per-instance, promise-locked, idempotent initialization.
+   * Safe for concurrent callers — only one init runs, all await the same promise.
+   * On failure the promise is cleared so a retry is possible.
+   */
+  async ensureInitialized(): Promise<void> {
+    if (this.ready) {
+      return;
+    }
+    if (!this.initPromise) {
+      this.initPromise = this.init().catch((err) => {
+        this.initPromise = undefined;
+        throw err;
+      });
+    }
+    return this.initPromise;
   }
 
   async configureS3(
@@ -44,14 +80,18 @@ export class DuckDBEngine {
   ): Promise<void> {
     await this.exec(`INSTALL httpfs`);
     await this.exec(`LOAD httpfs`);
-    await this.exec(`SET s3_region='${region}'`);
-    await this.exec(`SET s3_access_key_id='${keyId}'`);
-    await this.exec(`SET s3_secret_access_key='${secret}'`);
+    await this.exec(`SET s3_region='${escapeSqlString(region)}'`);
+    await this.exec(`SET s3_access_key_id='${escapeSqlString(keyId)}'`);
+    await this.exec(`SET s3_secret_access_key='${escapeSqlString(secret)}'`);
     if (token) {
-      await this.exec(`SET s3_session_token='${token}'`);
+      await this.exec(`SET s3_session_token='${escapeSqlString(token)}'`);
     }
   }
 
+  /**
+   * Register a table as a DuckDB VIEW. Failure-atomic: if introspection
+   * fails after the VIEW is created, the VIEW is rolled back (dropped).
+   */
   async registerTable(entry: TableEntry): Promise<ColumnInfo[]> {
     const viewSql = this.buildViewSql(
       entry.name,
@@ -61,17 +101,27 @@ export class DuckDBEngine {
     );
     log(`Registering table "${entry.name}" from ${entry.filePath}`);
     await this.exec(viewSql);
-    const cols = await this.introspectColumns(entry.name);
-    log(`Table "${entry.name}" registered with ${cols.length} column(s)`);
-    return cols;
+    try {
+      return await this.introspectColumns(entry.name);
+    } catch (err) {
+      // Rollback: drop the view that was just created
+      try {
+        await this.exec(`DROP VIEW IF EXISTS ${escapeDuckDBIdentifier(entry.name)}`);
+      } catch {
+        // Best-effort rollback
+      }
+      throw err;
+    }
   }
 
   async dropTable(name: string): Promise<void> {
-    await this.exec(`DROP VIEW IF EXISTS "${name}"`);
+    const ident = escapeDuckDBIdentifier(name);
+    await this.exec(`DROP VIEW IF EXISTS ${ident}`);
   }
 
   async renameTable(oldName: string, entry: TableEntry): Promise<void> {
-    await this.exec(`DROP VIEW IF EXISTS "${oldName}"`);
+    const oldIdent = escapeDuckDBIdentifier(oldName);
+    await this.exec(`DROP VIEW IF EXISTS ${oldIdent}`);
     const viewSql = this.buildViewSql(
       entry.name,
       entry.filePath,
@@ -223,28 +273,31 @@ export class DuckDBEngine {
     type: FileType,
     hivePartitioning = false,
   ): string {
+    const ident = escapeDuckDBIdentifier(name);
+    const escapedPath = escapeSqlString(path);
     let readExpr: string;
     switch (type) {
       case "csv":
-        readExpr = `read_csv('${path}', AUTO_DETECT=TRUE${hivePartitioning ? ", hive_partitioning=true" : ""})`;
+        readExpr = `read_csv('${escapedPath}', AUTO_DETECT=TRUE${hivePartitioning ? ", hive_partitioning=true" : ""})`;
         break;
       case "json":
-        readExpr = `read_json_auto('${path}'${hivePartitioning ? ", hive_partitioning=true" : ""})`;
+        readExpr = `read_json_auto('${escapedPath}'${hivePartitioning ? ", hive_partitioning=true" : ""})`;
         break;
       case "parquet":
         readExpr = hivePartitioning
-          ? `read_parquet('${path}', hive_partitioning=true)`
-          : `read_parquet('${path}')`;
+          ? `read_parquet('${escapedPath}', hive_partitioning=true)`
+          : `read_parquet('${escapedPath}')`;
         break;
       case "text":
-        readExpr = `read_csv('${path}', HEADER=FALSE, COLUMNS={'line':'VARCHAR'}${hivePartitioning ? ", hive_partitioning=true" : ""})`;
+        readExpr = `read_csv('${escapedPath}', HEADER=FALSE, COLUMNS={'line':'VARCHAR'}${hivePartitioning ? ", hive_partitioning=true" : ""})`;
         break;
     }
-    return `CREATE OR REPLACE VIEW "${name}" AS SELECT * FROM ${readExpr}`;
+    return `CREATE OR REPLACE VIEW ${ident} AS SELECT * FROM ${readExpr}`;
   }
 
   private async introspectColumns(tableName: string): Promise<ColumnInfo[]> {
-    const reader = await this.conn.runAndReadAll(`DESCRIBE "${tableName}"`);
+    const ident = escapeDuckDBIdentifier(tableName);
+    const reader = await this.conn.runAndReadAll(`DESCRIBE ${ident}`);
     const rows = reader.getRowObjects() as {
       column_name: string;
       column_type: string;

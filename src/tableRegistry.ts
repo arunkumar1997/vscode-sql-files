@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
-import { TableEntry } from "./types";
+import * as crypto from "crypto";
+import { ConfigTableEntry, TableEntry, TableLoadState } from "./types";
 
 const STORAGE_KEY = "fileSql.registeredTables";
 
@@ -8,6 +9,10 @@ export class TableRegistry {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private memento: vscode.Memento | undefined;
+  /** Hash of the last config load — used as mutation guard for reload detection. */
+  private _lastConfigDigest: string | undefined;
+  /** Runtime-only identifiers for entries (not persisted). */
+  private runtimeIds = new Map<string, string>();
 
   /** Bind a workspace-state memento for persistence. */
   setStorage(memento: vscode.Memento): void {
@@ -15,18 +20,35 @@ export class TableRegistry {
   }
 
   add(entry: TableEntry): void {
+    // Ad-hoc origin by default
+    if (!entry.origin) {
+      entry.origin = "adhoc";
+    }
+    // Reject replacing an entry that is currently loading
+    const existing = this.tables.get(entry.name);
+    if (existing?.loadState === "loading") {
+      throw new Error(`Cannot replace table "${entry.name}" while it is loading`);
+    }
     this.tables.set(entry.name, entry);
+    this.runtimeIds.set(entry.name, crypto.randomUUID());
     this._onDidChange.fire();
     this.persist();
   }
 
   remove(name: string): boolean {
-    const deleted = this.tables.delete(name);
-    if (deleted) {
-      this._onDidChange.fire();
-      this.persist();
+    const entry = this.tables.get(name);
+    if (!entry) {
+      return false;
     }
-    return deleted;
+    // Block remove during loading
+    if (entry.loadState === "loading") {
+      throw new Error(`Cannot remove table "${name}" while it is loading`);
+    }
+    this.tables.delete(name);
+    this.runtimeIds.delete(name);
+    this._onDidChange.fire();
+    this.persist();
+    return true;
   }
 
   get(name: string): TableEntry | undefined {
@@ -42,7 +64,14 @@ export class TableRegistry {
   }
 
   clear(): void {
+    // Block clear if any table is currently loading
+    for (const entry of this.tables.values()) {
+      if (entry.loadState === "loading") {
+        throw new Error("Cannot clear tables while one or more tables are loading");
+      }
+    }
     this.tables.clear();
+    this.runtimeIds.clear();
     this._onDidChange.fire();
     this.persist();
   }
@@ -55,12 +84,22 @@ export class TableRegistry {
     if (!entry) {
       return false;
     }
+    // Block rename during loading
+    if (entry.loadState === "loading") {
+      throw new Error(`Cannot rename table "${oldName}" while it is loading`);
+    }
     if (this.tables.has(newName)) {
       throw new Error(`Table "${newName}" already exists`);
     }
     this.tables.delete(oldName);
     entry.name = newName;
     this.tables.set(newName, entry);
+    // Preserve runtime identity through rename
+    const rid = this.runtimeIds.get(oldName);
+    this.runtimeIds.delete(oldName);
+    if (rid) {
+      this.runtimeIds.set(newName, rid);
+    }
     this._onDidChange.fire();
     this.persist();
     return true;
@@ -75,26 +114,139 @@ export class TableRegistry {
     }
   }
 
+  /** Get the stable runtime identity for an entry (not persisted to config). */
+  getRuntimeId(name: string): string | undefined {
+    return this.runtimeIds.get(name);
+  }
+
   /** Load persisted entries into the in-memory map (does NOT register with engine). */
   loadFromStorage(): TableEntry[] {
     if (!this.memento) {
       return [];
     }
     const stored = this.memento.get<TableEntry[]>(STORAGE_KEY, []);
-    for (const entry of stored) {
+    // Filter out any entries that leaked with config origin or configured state
+    const filtered = stored.filter(
+      (entry) => entry.origin !== "config" && entry.loadState !== "configured",
+    );
+    for (const entry of filtered) {
+      // Persisted entries are always adhoc origin (config entries are never persisted)
+      entry.origin = "adhoc";
+      // Clear any loadState that isn't appropriate for restored entries
+      if (entry.loadState === "loading" || entry.loadState === "error") {
+        entry.loadState = undefined;
+      }
       this.tables.set(entry.name, entry);
+      this.runtimeIds.set(entry.name, crypto.randomUUID());
     }
-    if (stored.length > 0) {
+    if (filtered.length > 0) {
       this._onDidChange.fire();
     }
-    return stored;
+    return filtered;
   }
 
+  /** Persist only adhoc-origin entries. Config-origin entries must never leak into workspaceState. */
   private persist(): void {
     if (!this.memento) {
       return;
     }
-    this.memento.update(STORAGE_KEY, Array.from(this.tables.values()));
+    const adhocEntries = Array.from(this.tables.values()).filter(
+      (e) => e.origin === "adhoc" || e.origin === undefined,
+    );
+    this.memento.update(STORAGE_KEY, adhocEntries);
+  }
+
+  /**
+   * Add entries from config as 'configured' (not yet loaded).
+   * Skips entries whose name already exists in the registry (ad-hoc or memento wins).
+   * Does NOT trigger DuckDB registration.
+   * Does NOT persist to workspaceState.
+   * Stores a digest of the config entries for mutation guard.
+   * Source is set declaratively at creation and treated as immutable.
+   */
+  addConfigured(entries: ConfigTableEntry[]): void {
+    // Compute and store config digest for mutation detection
+    this._lastConfigDigest = this.computeConfigDigest(entries);
+
+    let changed = false;
+    for (const entry of entries) {
+      // Normalize name and source before all checks (whitespace cannot bypass safety)
+      const name = entry.name.trim();
+      const source = entry.source.trim();
+      if (this.tables.has(name)) {
+        continue; // existing entry wins — backward compat
+      }
+      const tableEntry: TableEntry = {
+        name,
+        filePath: source, // runtime filePath initially mirrors source; resolved on load
+        fileType: entry.fileType,
+        isS3: source.startsWith("s3://"),
+        sourceUri: source.startsWith("s3://") ? source : undefined,
+        hivePartitioning: entry.hivePartitioning,
+        loadState: "configured",
+        origin: "config",
+        source, // declarative and immutable
+      };
+      Object.defineProperty(tableEntry, "source", {
+        value: source,
+        writable: false,
+        enumerable: true,
+        configurable: false,
+      });
+      this.tables.set(name, tableEntry);
+      this.runtimeIds.set(name, crypto.randomUUID());
+      changed = true;
+    }
+    if (changed) {
+      this._onDidChange.fire();
+      // NOTE: no persist() call — config entries must not go to workspaceState
+    }
+  }
+
+  /**
+   * Transition a table's load state. Fires onDidChange.
+   * No-op if the table doesn't exist.
+   */
+  setLoadState(name: string, state: TableLoadState, error?: string): void {
+    const entry = this.tables.get(name);
+    if (!entry) {
+      return;
+    }
+    entry.loadState = state;
+    entry.loadError = state === "error" ? error : undefined;
+    this._onDidChange.fire();
+    this.persist();
+  }
+
+  /** Returns only tables with loadState 'loaded' (or undefined for backward compat). */
+  getLoaded(): TableEntry[] {
+    return Array.from(this.tables.values()).filter(
+      (e) => e.loadState === "loaded" || e.loadState === undefined,
+    );
+  }
+
+  /** Get the last computed config digest (for external mutation detection). */
+  get lastConfigDigest(): string | undefined {
+    return this._lastConfigDigest;
+  }
+
+  /** Check if a set of config entries matches the last loaded config. */
+  isConfigUnchanged(entries: ConfigTableEntry[]): boolean {
+    return this.computeConfigDigest(entries) === this._lastConfigDigest;
+  }
+
+  private computeConfigDigest(entries: ConfigTableEntry[]): string {
+    // Simple deterministic JSON serialization for comparison
+    const normalized = entries
+      .map((e) => `${e.name}|${e.source}|${e.fileType}|${e.hivePartitioning ?? ""}`)
+      .sort()
+      .join("\n");
+    // Simple hash (djb2) — sufficient for change detection, not crypto
+    let hash = 5381;
+    for (let i = 0; i < normalized.length; i++) {
+      hash = ((hash << 5) + hash + normalized.charCodeAt(i)) | 0;
+    }
+    return hash.toString(36);
   }
 
   dispose(): void {

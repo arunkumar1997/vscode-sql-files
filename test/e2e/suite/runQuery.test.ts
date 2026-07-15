@@ -13,6 +13,10 @@ suite("runQuery", () => {
 
     const registry = api.getRegistry()!;
     const engine = api.getEngine()!;
+
+    // Ensure engine is initialized (lazy init)
+    await engine.ensureInitialized();
+
     const csvPath = path.resolve(
       __dirname,
       "../../../../test/fixtures/sales.csv",
@@ -36,7 +40,7 @@ suite("runQuery", () => {
       for (const e of registry.getAll()) {
         try {
           await engine.dropTable(e.name);
-        } catch {}
+        } catch { }
       }
       registry.clear();
     }

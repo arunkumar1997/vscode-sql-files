@@ -16,6 +16,9 @@ suite("clearTables", () => {
     const registry = api.getRegistry()!;
     const engine = api.getEngine()!;
 
+    // Ensure engine is initialized (lazy init)
+    await engine.ensureInitialized();
+
     const fixturesDir = path.resolve(
       __dirname,
       "../../../../test/fixtures",

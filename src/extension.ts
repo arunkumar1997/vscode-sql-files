@@ -11,7 +11,14 @@ import { clearTables, removeTable, renameTable } from "./commands/clearTables";
 import { SqlCompletionProvider } from "./providers/completionProvider";
 import { cleanupTempDir } from "./s3Handler";
 import { TableEntry } from "./types";
-import { initLogger, log, logError } from "./logger";
+import { initLogger, log } from "./logger";
+import {
+  loadTable,
+  loadAllTables,
+  unloadTable,
+  reloadTable,
+  saveWorkspaceConfig,
+} from "./commands/configCommands";
 
 /** Exposed only when running inside the VS Code test host. */
 export interface TestApi {
@@ -32,24 +39,11 @@ export async function activate(
   registry = new TableRegistry();
   registry.setStorage(context.workspaceState);
 
-  try {
-    log("Initializing DuckDB engine...");
-    await engine.init();
-    log("DuckDB engine initialized successfully");
-  } catch (err: unknown) {
-    logError("DuckDB failed to initialize", err);
-    vscode.window.showErrorMessage(
-      `File SQL: DuckDB failed to initialize — ${(err as Error).message}`,
-    );
-  }
-
-  // Restore persisted tables (only if engine initialized successfully)
-  if (engine.isReady()) {
-    const savedEntries = registry.loadFromStorage();
-    log(`Restored ${savedEntries.length} persisted table(s)`);
-    if (savedEntries.length > 0) {
-      restoreEntries(savedEntries, registry, engine);
-    }
+  // Restore persisted tables — engine will be lazily initialized on first use
+  const savedEntries = registry.loadFromStorage();
+  log(`Restored ${savedEntries.length} persisted table(s)`);
+  if (savedEntries.length > 0) {
+    restoreEntries(savedEntries, registry, engine);
   }
 
   const treeProvider = new TablesTreeProvider(registry);
@@ -115,6 +109,64 @@ export async function activate(
       },
     ),
 
+    vscode.commands.registerCommand(
+      "fileSql.loadTable",
+      (item?: { entry: { name: string } }) => {
+        const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!wsRoot) {
+          vscode.window.showErrorMessage("File SQL: No workspace folder open.");
+          return;
+        }
+        if (item?.entry?.name) {
+          return vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `File SQL: Loading ${item.entry.name}…`, cancellable: true },
+            (progress, token) => loadTable(item.entry.name, registry!, engine!, wsRoot, progress, token),
+          );
+        }
+      },
+    ),
+
+    vscode.commands.registerCommand("fileSql.loadAllTables", () => {
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!wsRoot) {
+        vscode.window.showErrorMessage("File SQL: No workspace folder open.");
+        return;
+      }
+      return loadAllTables(registry!, engine!, wsRoot);
+    }),
+
+    vscode.commands.registerCommand(
+      "fileSql.unloadTable",
+      (item?: { entry: { name: string } }) => {
+        if (item?.entry?.name) {
+          return unloadTable(item.entry.name, registry!, engine!);
+        }
+      },
+    ),
+
+    vscode.commands.registerCommand(
+      "fileSql.reloadTable",
+      (item?: { entry: { name: string } }) => {
+        const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!wsRoot) {
+          vscode.window.showErrorMessage("File SQL: No workspace folder open.");
+          return;
+        }
+        if (item?.entry?.name) {
+          return reloadTable(item.entry.name, registry!, engine!, wsRoot);
+        }
+      },
+    ),
+
+    vscode.commands.registerCommand("fileSql.saveWorkspaceConfig", () => {
+      const wsFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!wsFolder) {
+        vscode.window.showErrorMessage("File SQL: No workspace folder open.");
+        return;
+      }
+      return saveWorkspaceConfig(registry!, wsFolder.uri);
+    }),
+
     vscode.languages.registerCompletionItemProvider(
       [{ language: "sql" }, { language: "plaintext" }],
       new SqlCompletionProvider(registry),
@@ -132,6 +184,7 @@ export async function activate(
           return;
         }
         try {
+          await engine!.ensureInitialized();
           const cols = await engine!.registerTable(entry);
           entry.columns = cols;
           registry!.add(entry);
@@ -170,6 +223,16 @@ async function restoreEntries(
   registry: TableRegistry,
   engine: DuckDBEngine,
 ): Promise<void> {
+  try {
+    await engine.ensureInitialized();
+  } catch {
+    // Engine init failed — remove all persisted entries since we can't register them
+    for (const entry of entries) {
+      registry.remove(entry.name);
+    }
+    return;
+  }
+
   for (const entry of entries) {
     // Skip S3 entries whose temp files no longer exist
     if (entry.isS3 && !fs.existsSync(entry.filePath)) {

@@ -183,7 +183,7 @@ describe("TableRegistry", () => {
       const entries = [makeEntry("persisted")];
       memento.update("fileSql.registeredTables", entries);
 
-      registry.setStorage(memento as any);
+      registry.setStorage(memento as unknown as import("vscode").Memento);
       const loaded = registry.loadFromStorage();
       expect(loaded).toHaveLength(1);
       expect(registry.has("persisted")).toBe(true);
