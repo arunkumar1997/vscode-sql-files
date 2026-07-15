@@ -70,12 +70,14 @@ export async function renameTable(
     return;
   }
 
+  let registryRenamed = false;
   try {
-    registry.rename(oldName, trimmed);          // updates entry.name in-place
+    registryRenamed = registry.rename(oldName, trimmed); // updates entry.name in-place
     await engine.renameTable(oldName, entry);   // drops old VIEW, creates new one
   } catch (err: unknown) {
-    // Roll back registry rename on engine failure
-    registry.rename(trimmed, oldName);
+    if (registryRenamed) {
+      registry.rename(trimmed, oldName);
+    }
     vscode.window.showErrorMessage(`Rename failed: ${(err as Error).message}`);
   }
 }
