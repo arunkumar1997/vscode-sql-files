@@ -5,3 +5,5 @@ out/
 .env
 .DS_Store
 scripts/__pycache__/
+coverage/
+.vitest-cache/

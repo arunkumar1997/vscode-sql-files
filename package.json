@@ -181,7 +181,10 @@
     "lint": "eslint src --ext ts,tsx",
     "package:current": "node scripts/package.mjs --current",
     "package:all": "node scripts/package.mjs --all",
-    "package:target": "node scripts/package.mjs --target"
+    "package:target": "node scripts/package.mjs --target",
+    "test:unit": "vitest run test/unit",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
@@ -196,11 +199,14 @@
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "@types/vscode": "^1.85.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.10",
+    "vitest-mock-extended": "^5.0.0"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.3-r.3"
