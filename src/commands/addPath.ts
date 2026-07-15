@@ -147,51 +147,6 @@ async function handleBrowseFile(
   );
 }
 
-async function handleBrowseFolder(
-  registry: TableRegistry,
-  engine: DuckDBEngine,
-): Promise<void> {
-  const uris = await vscode.window.showOpenDialog({
-    canSelectFiles: false,
-    canSelectFolders: true,
-    canSelectMany: false,
-    openLabel: "Load Folder",
-  });
-
-  if (!uris || uris.length === 0) {
-    return;
-  }
-
-  const folderPath = uris[0].fsPath;
-  log(`User browsed folder: ${folderPath}`);
-  const entries = scanFolder(folderPath);
-
-  if (entries.length === 0) {
-    vscode.window.showWarningMessage(
-      "No supported files found in that folder.",
-    );
-    return;
-  }
-
-  log(`Found ${entries.length} supported file(s) in browsed folder`);
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: "File SQL: Loading folder…",
-    },
-    async (progress) => {
-      await registerEntries(entries, registry, engine, progress);
-      log(`Successfully loaded ${entries.length} table(s) from browsed folder`);
-      vscode.window.showInformationMessage(
-        `File SQL: Loaded ${entries.length} table(s) from folder.`,
-      );
-      if (!isQueryEditorOpen()) {
-        vscode.commands.executeCommand("fileSql.openQueryEditor");
-      }
-    },
-  );
-}
-
 async function handleS3Path(
   uri: string,
   registry: TableRegistry,

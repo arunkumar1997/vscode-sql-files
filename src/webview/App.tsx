@@ -77,11 +77,11 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                  ...t,
-                  result: msg.payload as QueryResult,
-                  error: null,
-                  running: false,
-                }
+                    ...t,
+                    result: msg.payload as QueryResult,
+                    error: null,
+                    running: false,
+                  }
                 : t,
             ),
           );
@@ -91,11 +91,11 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                  ...t,
-                  error: (msg.payload as { message: string }).message,
-                  result: null,
-                  running: false,
-                }
+                    ...t,
+                    error: (msg.payload as { message: string }).message,
+                    result: null,
+                    running: false,
+                  }
                 : t,
             ),
           );
@@ -105,14 +105,14 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                  ...t,
-                  exporting: false,
-                  exportStatus: formatExportStatus(
-                    (msg.payload as { format: ExportFormat }).format,
-                    (msg.payload as { path: string }).path,
-                  ),
-                  exportError: null,
-                }
+                    ...t,
+                    exporting: false,
+                    exportStatus: formatExportStatus(
+                      (msg.payload as { format: ExportFormat }).format,
+                      (msg.payload as { path: string }).path,
+                    ),
+                    exportError: null,
+                  }
                 : t,
             ),
           );
@@ -122,11 +122,11 @@ export function App(): JSX.Element {
             prev.map((t) =>
               t.id === msg.tabId
                 ? {
-                  ...t,
-                  exporting: false,
-                  exportStatus: null,
-                  exportError: (msg.payload as { message: string }).message,
-                }
+                    ...t,
+                    exporting: false,
+                    exportStatus: null,
+                    exportError: (msg.payload as { message: string }).message,
+                  }
                 : t,
             ),
           );
@@ -255,7 +255,7 @@ export function App(): JSX.Element {
   /** Get or create a stable runRef for a given tab */
   function getRunRef(tabId: string): React.MutableRefObject<() => void> {
     if (!runRefs.current.has(tabId)) {
-      runRefs.current.set(tabId, { current: () => { } });
+      runRefs.current.set(tabId, { current: () => {} });
     }
     return runRefs.current.get(tabId)!;
   }
@@ -329,7 +329,6 @@ export function App(): JSX.Element {
               tables={tables}
               onRun={(sql) => handleRunSql(tab.id, sql)}
               onChange={(sql) => handleSqlChange(tab.id, sql)}
-              running={tab.running}
               initialDoc={tab.sql}
               runRef={getRunRef(tab.id)}
             />

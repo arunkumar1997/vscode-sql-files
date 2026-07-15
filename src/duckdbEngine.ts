@@ -268,6 +268,8 @@ export class DuckDBEngine {
   dispose(): void {
     try {
       this.conn?.closeSync();
-    } catch {}
+    } catch {
+      // Disposal is best-effort during extension shutdown and test cleanup.
+    }
   }
 }

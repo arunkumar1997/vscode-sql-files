@@ -18,7 +18,9 @@ export async function clearTables(
   for (const entry of registry.getAll()) {
     try {
       await engine.dropTable(entry.name);
-    } catch {}
+    } catch {
+      // Continue clearing the registry if a DuckDB view is already absent.
+    }
   }
   registry.clear();
 }
@@ -30,7 +32,9 @@ export async function removeTable(
 ): Promise<void> {
   try {
     await engine.dropTable(tableName);
-  } catch {}
+  } catch {
+    // Removing the registry entry remains safe if the view is already absent.
+  }
   registry.remove(tableName);
 }
 

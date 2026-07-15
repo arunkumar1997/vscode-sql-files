@@ -12,7 +12,15 @@ interface Props {
   exportError: string | null;
 }
 
-export function Toolbar({ onRun, onExport, running, exporting, result, exportStatus, exportError }: Props): JSX.Element {
+export function Toolbar({
+  onRun,
+  onExport,
+  running,
+  exporting,
+  result,
+  exportStatus,
+  exportError,
+}: Props): JSX.Element {
   const canExport = isExportEnabled(result, running, exporting);
   const truncatedTooltip = result?.truncated
     ? "Export reruns the original query and exports all rows, not only the visible truncated subset."
@@ -27,9 +35,7 @@ export function Toolbar({ onRun, onExport, running, exporting, result, exportSta
       >
         {running ? "Running\u2026" : "\u25B6 Run"}
       </button>
-      <span className="toolbar-hint">
-        Ctrl+Enter
-      </span>
+      <span className="toolbar-hint">Ctrl+Enter</span>
 
       <span className="toolbar-separator" />
 
@@ -56,17 +62,15 @@ export function Toolbar({ onRun, onExport, running, exporting, result, exportSta
             {result.rowCount} row{result.rowCount !== 1 ? "s" : ""}
           </span>
           {result.truncated && (
-            <span className="truncated" title={truncatedTooltip}>results truncated</span>
+            <span className="truncated" title={truncatedTooltip}>
+              results truncated
+            </span>
           )}
         </>
       )}
 
-      {exportStatus && (
-        <span className="export-status">{exportStatus}</span>
-      )}
-      {exportError && (
-        <span className="export-error">{exportError}</span>
-      )}
+      {exportStatus && <span className="export-status">{exportStatus}</span>}
+      {exportError && <span className="export-error">{exportError}</span>}
     </div>
   );
 }

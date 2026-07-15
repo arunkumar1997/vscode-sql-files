@@ -4,15 +4,7 @@ import { TableRegistry } from "../tableRegistry";
 export class SqlCompletionProvider implements vscode.CompletionItemProvider {
   constructor(private readonly registry: TableRegistry) {}
 
-  provideCompletionItems(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-  ): vscode.CompletionItem[] {
-    const linePrefix = document
-      .lineAt(position)
-      .text.substring(0, position.character)
-      .toLowerCase();
-
+  provideCompletionItems(): vscode.CompletionItem[] {
     const items: vscode.CompletionItem[] = [];
 
     for (const entry of this.registry.getAll()) {
