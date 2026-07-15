@@ -314,4 +314,277 @@ describe("Command — exportResults", () => {
     const lines = content.trim().split("\n");
     expect(lines.length).toBe(6); // header + 5 data rows (all of them)
   });
+
+  // --- QA gap tests ---
+
+  it("custom COPY with non-default options through message handler bypasses maxRows", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    tmp = createTempDir();
+    const dest = path.join(tmp.path, "custom-delim.csv");
+
+    const handler = getHandler()!;
+    await handler({
+      type: "runQuery",
+      payload: {
+        sql: `COPY (SELECT * FROM sales ORDER BY id) TO '${dest.replace(/'/g, "''")}' (FORMAT CSV, HEADER true, DELIMITER '|')`,
+        tabId: "tab1",
+      },
+    });
+
+    // Should be queryResult with empty rows (non-row statement)
+    const result = postedMessages.find((m: any) => m.type === "queryResult") as any;
+    expect(result).toBeDefined();
+    expect(result.payload.rowCount).toBe(0);
+    expect(result.payload.columns).toEqual([]);
+
+    // File should have ALL 5 rows despite any maxRows setting
+    expect(fs.existsSync(dest)).toBe(true);
+    const content = fs.readFileSync(dest, "utf-8");
+    const lines = content.trim().split("\n");
+    expect(lines.length).toBe(6);
+    // Verify custom delimiter was applied
+    expect(lines[0]).toContain("|");
+  });
+
+  it("custom COPY failure reports queryError and does not masquerade as success", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    const handler = getHandler()!;
+    await handler({
+      type: "runQuery",
+      payload: {
+        sql: `COPY (SELECT * FROM nonexistent_table_xyz) TO '/tmp/should-not-exist.csv' (FORMAT CSV)`,
+        tabId: "tab1",
+      },
+    });
+
+    const error = postedMessages.find((m: any) => m.type === "queryError") as any;
+    expect(error).toBeDefined();
+    expect(error.tabId).toBe("tab1");
+    expect(error.payload.message).toBeTruthy();
+
+    // No queryResult should have been posted
+    const result = postedMessages.find((m: any) => m.type === "queryResult");
+    expect(result).toBeUndefined();
+
+    // No file created
+    expect(fs.existsSync("/tmp/should-not-exist.csv")).toBe(false);
+  });
+
+  it("convenience export failure posts exportError and leaves no partial output", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    tmp = createTempDir();
+    // Trigger an engine error by corrupting the stored SQL
+    const handler = getHandler()!;
+    await handler({
+      type: "runQuery",
+      payload: { sql: "SELECT * FROM sales", tabId: "tab1" },
+    });
+
+    // Now drop the table so the stored SQL will fail on re-execution
+    await harness.engine.dropTable("sales");
+
+    const savePath = path.join(tmp.path, "partial.csv");
+    (window.showSaveDialog as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      Uri.file(savePath),
+    );
+
+    await handler({
+      type: "exportResults",
+      payload: { tabId: "tab1", format: "csv" },
+    });
+
+    const exportError = postedMessages.find((m: any) => m.type === "exportError") as any;
+    expect(exportError).toBeDefined();
+    expect(exportError.tabId).toBe("tab1");
+    expect(exportError.payload.message).toBeTruthy();
+
+    // No misleading success
+    const exportResult = postedMessages.find((m: any) => m.type === "exportResult");
+    expect(exportResult).toBeUndefined();
+  });
+
+  it("per-tab SQL isolation: exports correct SQL for each tab", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    tmp = createTempDir();
+    const handler = getHandler()!;
+
+    // Run different queries on two tabs
+    await handler({
+      type: "runQuery",
+      payload: { sql: "SELECT id, region FROM sales WHERE region = 'north'", tabId: "tab-a" },
+    });
+    await handler({
+      type: "runQuery",
+      payload: { sql: "SELECT * FROM sales ORDER BY id", tabId: "tab-b" },
+    });
+
+    // Export tab-a
+    const savePathA = path.join(tmp.path, "tab-a.csv");
+    (window.showSaveDialog as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      Uri.file(savePathA),
+    );
+    await handler({
+      type: "exportResults",
+      payload: { tabId: "tab-a", format: "csv" },
+    });
+
+    // Export tab-b
+    const savePathB = path.join(tmp.path, "tab-b.csv");
+    (window.showSaveDialog as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      Uri.file(savePathB),
+    );
+    await handler({
+      type: "exportResults",
+      payload: { tabId: "tab-b", format: "csv" },
+    });
+
+    // tab-a should have only 'north' rows (2 data rows)
+    const contentA = fs.readFileSync(savePathA, "utf-8");
+    const linesA = contentA.trim().split("\n");
+    expect(linesA.length).toBe(3); // header + 2 north rows
+
+    // tab-b should have all 5 rows
+    const contentB = fs.readFileSync(savePathB, "utf-8");
+    const linesB = contentB.trim().split("\n");
+    expect(linesB.length).toBe(6); // header + 5 rows
+  });
+
+  it("multi-statement rejection through the webview bridge", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    const handler = getHandler()!;
+    await handler({
+      type: "runQuery",
+      payload: {
+        sql: "SELECT * FROM sales; DROP VIEW sales;",
+        tabId: "tab1",
+      },
+    });
+
+    const error = postedMessages.find((m: any) => m.type === "queryError") as any;
+    expect(error).toBeDefined();
+    expect(error.payload.message).toMatch(/multiple statements/i);
+
+    // No queryResult
+    const result = postedMessages.find((m: any) => m.type === "queryResult");
+    expect(result).toBeUndefined();
+  });
+
+  it("malformed exportResults with missing payload does not crash", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    const handler = getHandler()!;
+
+    // Missing payload entirely
+    await handler({ type: "exportResults" });
+
+    // Should post exportError, not crash
+    const error = postedMessages.find((m: any) => m.type === "exportError") as any;
+    expect(error).toBeDefined();
+    expect(error.payload.message).toBeTruthy();
+  });
+
+  it("malformed exportResults with null payload does not crash", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    const handler = getHandler()!;
+    await handler({ type: "exportResults", payload: null });
+
+    const error = postedMessages.find((m: any) => m.type === "exportError") as any;
+    expect(error).toBeDefined();
+    expect(error.payload.message).toBeTruthy();
+  });
+
+  it("malformed exportResults with wrong types does not crash", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    const handler = getHandler()!;
+    await handler({ type: "exportResults", payload: { tabId: 123, format: true } });
+
+    // format=true fails type validation (not a string), should post exportError
+    const error = postedMessages.find((m: any) => m.type === "exportError") as any;
+    expect(error).toBeDefined();
+    expect(error.payload.message).toMatch(/malformed|unsupported/i);
+  });
+
+  it("exportResults with missing tabId (no prior query) posts exportError", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    const handler = getHandler()!;
+    // Don't run a query first — tabSqlMap has nothing for this tabId
+    (window.showSaveDialog as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      Uri.file("/tmp/test.csv"),
+    );
+    await handler({
+      type: "exportResults",
+      payload: { tabId: "never-queried", format: "csv" },
+    });
+
+    const error = postedMessages.find((m: any) => m.type === "exportError") as any;
+    expect(error).toBeDefined();
+    expect(error.payload.message).toMatch(/no query/i);
+  });
+
+  it("Parquet export readback validates file content", async () => {
+    const registry = await setupWithTable();
+    const { mockPanel, postedMessages, getHandler } = buildMockPanel();
+    openEditor(registry, mockPanel);
+
+    tmp = createTempDir();
+    const savePath = path.join(tmp.path, "readback.parquet");
+    (window.showSaveDialog as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      Uri.file(savePath),
+    );
+
+    const handler = getHandler()!;
+    await handler({
+      type: "runQuery",
+      payload: { sql: "SELECT * FROM sales ORDER BY id", tabId: "tab1" },
+    });
+    await handler({
+      type: "exportResults",
+      payload: { tabId: "tab1", format: "parquet" },
+    });
+
+    const exportResult = postedMessages.find((m: any) => m.type === "exportResult") as any;
+    expect(exportResult).toBeDefined();
+
+    // Read the Parquet back through DuckDB to verify it's valid
+    const readback = await harness.engine.executeQuery(
+      `SELECT COUNT(*) AS cnt FROM read_parquet('${savePath}')`,
+      100,
+    );
+    expect(Number(readback.rows[0].cnt)).toBe(5);
+
+    // Verify column structure
+    const schema = await harness.engine.executeQuery(
+      `SELECT * FROM read_parquet('${savePath}') LIMIT 1`,
+      10,
+    );
+    expect(schema.columns.map((c: any) => c.name)).toEqual(
+      expect.arrayContaining(["id", "region", "amount", "ts"]),
+    );
+  });
 });

@@ -427,3 +427,90 @@ describe("Engine — multi-statement rejection", () => {
     expect(result.rows.length).toBe(1);
   });
 });
+
+describe("Engine — CSV edge values in export", () => {
+  let harness: EngineHarness;
+  let tmp: TempDir;
+
+  afterEach(() => {
+    harness?.dispose();
+    tmp?.cleanup();
+  });
+
+  it("exports commas, quotes, newlines, nulls, and unicode correctly", async () => {
+    harness = await createEngine();
+    tmp = createTempDir();
+    const dest = path.join(tmp.path, "edge.csv");
+
+    // Create a table with edge-case values
+    await harness.engine.executeQuery(
+      `CREATE TABLE edge_test AS SELECT * FROM (VALUES
+        (1, 'hello, world', '"quoted"', E'line1\\nline2', NULL, '日本語'),
+        (2, 'plain', 'no-quotes', 'single-line', 'value', 'émojis 🎉')
+      ) AS t(id, comma_val, quote_val, newline_val, null_val, unicode_val)`,
+      10,
+    );
+
+    await harness.engine.exportQuery("SELECT * FROM edge_test ORDER BY id", dest, "csv");
+
+    expect(fs.existsSync(dest)).toBe(true);
+    const content = fs.readFileSync(dest, "utf-8");
+    // Should contain the header and 2 data rows
+    // CSV must properly escape commas and quotes
+    expect(content).toContain("hello, world");
+    expect(content).toContain("quoted");
+    expect(content).toContain("日本語");
+    expect(content).toContain("émojis 🎉");
+
+    // Read it back through DuckDB to confirm round-trip validity
+    const readback = await harness.engine.executeQuery(
+      `SELECT * FROM read_csv('${dest}', AUTO_DETECT=TRUE) ORDER BY id`,
+      10,
+    );
+    expect(readback.rows.length).toBe(2);
+    expect(readback.rows[0].comma_val).toBe("hello, world");
+    expect(readback.rows[0].unicode_val).toBe("日本語");
+    expect(readback.rows[1].unicode_val).toBe("émojis 🎉");
+    // NULL value should be null
+    expect(readback.rows[0].null_val).toBe(null);
+  });
+});
+
+describe("Engine — Parquet export readback validates structure", () => {
+  let harness: EngineHarness;
+  let tmp: TempDir;
+
+  afterEach(() => {
+    harness?.dispose();
+    tmp?.cleanup();
+  });
+
+  it("exports and reads back typed Parquet data correctly", async () => {
+    harness = await createEngine();
+    tmp = createTempDir();
+    const dest = path.join(tmp.path, "typed.parquet");
+
+    await harness.engine.executeQuery(
+      `CREATE TABLE typed_test AS SELECT
+        42 AS int_val,
+        3.14 AS float_val,
+        'hello' AS str_val,
+        true AS bool_val`,
+      10,
+    );
+
+    await harness.engine.exportQuery("SELECT * FROM typed_test", dest, "parquet");
+
+    expect(fs.existsSync(dest)).toBe(true);
+
+    // Read back and verify types preserved
+    const readback = await harness.engine.executeQuery(
+      `SELECT * FROM read_parquet('${dest}')`,
+      10,
+    );
+    expect(readback.rows.length).toBe(1);
+    expect(Number(readback.rows[0].int_val)).toBe(42);
+    expect(readback.rows[0].str_val).toBe("hello");
+    expect(readback.rows[0].bool_val).toBe(true);
+  });
+});

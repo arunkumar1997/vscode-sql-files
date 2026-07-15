@@ -5,7 +5,7 @@
 | 0. Prioritization and plan | Remy | Done | Team debate completed; issue #4 selected |
 | 1. Engine contract | Sage | Done | RED 3 failures → GREEN 20/20 focused, full suite 140/140 |
 | 2. Extension/webview flow | Nova + Milo | Done | RED 6 failures → GREEN 7/7 focused, full suite 157/157 |
-| 3. QA sign-off | Ivy | Blocked | Waits for implementation |
+| 3. QA sign-off | Ivy | Done | RED 2 → fix → GREEN 17/17 handler, 22/22 engine, 113 unit, 56 integration, 7 E2E |
 
 ## TDD Log
 

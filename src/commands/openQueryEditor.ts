@@ -90,7 +90,16 @@ export function openQueryEditor(
         }
       }
       if (msg.type === "exportResults") {
-        const { tabId, format } = msg.payload as { tabId: string; format: string };
+        const payload = msg.payload as { tabId?: string; format?: string } | null | undefined;
+        if (!payload || typeof payload.tabId !== "string" || typeof payload.format !== "string") {
+          panel?.webview.postMessage({
+            type: "exportError",
+            payload: { message: "Malformed export request: missing tabId or format." },
+            tabId: payload?.tabId ?? "",
+          });
+          return;
+        }
+        const { tabId, format } = payload;
 
         // Validate format at extension boundary
         if (!VALID_EXPORT_FORMATS.has(format)) {
