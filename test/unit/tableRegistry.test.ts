@@ -130,14 +130,34 @@ describe("TableRegistry", () => {
       expect(changeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it("overwrites destination if newName already exists (potential bug)", () => {
-      // NOTE: This documents current behavior — rename does NOT check
-      // for existing newName, so it silently overwrites.
+    it("throws when newName already exists", () => {
       registry.add(makeEntry("a", { filePath: "/a.csv" }));
       registry.add(makeEntry("b", { filePath: "/b.csv" }));
-      registry.rename("a", "b");
-      expect(registry.has("a")).toBe(false);
-      expect(registry.get("b")!.filePath).toBe("/a.csv");
+      expect(() => registry.rename("a", "b")).toThrow(/already exists/);
+    });
+
+    it("rename('a', 'a') is a no-op and returns true", () => {
+      registry.add(makeEntry("a", { filePath: "/a.csv" }));
+      changeSpy.mockReset();
+      const result = registry.rename("a", "a");
+      expect(result).toBe(true);
+      expect(registry.get("a")!.filePath).toBe("/a.csv");
+      expect(changeSpy).not.toHaveBeenCalled();
+    });
+
+    it("does not modify registry when newName collision throws", () => {
+      registry.add(makeEntry("a", { filePath: "/a.csv" }));
+      registry.add(makeEntry("b", { filePath: "/b.csv" }));
+      try {
+        registry.rename("a", "b");
+      } catch {
+        // expected
+      }
+      // Both entries must still exist with their original filePaths
+      expect(registry.has("a")).toBe(true);
+      expect(registry.has("b")).toBe(true);
+      expect(registry.get("a")!.filePath).toBe("/a.csv");
+      expect(registry.get("b")!.filePath).toBe("/b.csv");
     });
   });
 

@@ -69,83 +69,11 @@ export function openQueryEditor(
         return;
       }
       if (msg.type === "runQuery") {
-        const { sql, tabId } = msg.payload as { sql: string; tabId: string };
-        const { maxRows } = getConfig();
-        // Store original SQL for export
-        tabSqlMap.set(tabId, sql);
-        try {
-          const result = await engine.executeQuery(sql, maxRows);
-          panel?.webview.postMessage({
-            type: "queryResult",
-            payload: result,
-            tabId,
-          });
-        } catch (err: unknown) {
-          panel?.webview.postMessage({
-            type: "queryError",
-            payload: { message: (err as Error).message },
-            tabId,
-          });
-        }
+        await handleRunQuery(msg.payload, engine);
+        return;
       }
       if (msg.type === "exportResults") {
-        const payload = msg.payload as { tabId?: string; format?: string } | null | undefined;
-        if (!payload || typeof payload.tabId !== "string" || typeof payload.format !== "string") {
-          panel?.webview.postMessage({
-            type: "exportError",
-            payload: { message: "Malformed export request: missing tabId or format." },
-            tabId: payload?.tabId ?? "",
-          });
-          return;
-        }
-        const { tabId, format } = payload;
-
-        // Validate format at extension boundary
-        if (!VALID_EXPORT_FORMATS.has(format)) {
-          panel?.webview.postMessage({
-            type: "exportError",
-            payload: { message: `Unsupported export format: "${format}". Use "csv" or "parquet".` },
-            tabId,
-          });
-          return;
-        }
-
-        const exportFormat = format as ExportFormat;
-        const filterLabel = exportFormat === "csv" ? "CSV Files" : "Parquet Files";
-        const ext = exportFormat === "csv" ? "csv" : "parquet";
-
-        const uri = await vscode.window.showSaveDialog({
-          filters: { [filterLabel]: [ext] },
-          defaultUri: vscode.Uri.file(`export.${ext}`),
-        });
-
-        // User cancelled
-        if (!uri) return;
-
-        const sql = tabSqlMap.get(tabId);
-        if (!sql) {
-          panel?.webview.postMessage({
-            type: "exportError",
-            payload: { message: "No query to export. Run a query first." },
-            tabId,
-          });
-          return;
-        }
-
-        try {
-          await engine.exportQuery(sql, uri.fsPath, exportFormat);
-          panel?.webview.postMessage({
-            type: "exportResult",
-            payload: { path: uri.fsPath, format: exportFormat },
-            tabId,
-          });
-        } catch (err: unknown) {
-          panel?.webview.postMessage({
-            type: "exportError",
-            payload: { message: (err as Error).message },
-            tabId,
-          });
-        }
+        await handleExportResults(msg.payload, engine);
       }
     },
     undefined,
@@ -157,6 +85,88 @@ export function openQueryEditor(
     tabSqlMap.clear();
     tablesSub.dispose();
   });
+}
+
+async function handleRunQuery(payload: unknown, engine: DuckDBEngine): Promise<void> {
+  const query = payload as { sql?: unknown; tabId?: unknown } | null | undefined;
+  if (!query || typeof query.sql !== "string" || typeof query.tabId !== "string") {
+    panel?.webview.postMessage({
+      type: "queryError",
+      payload: { message: "Malformed query request: missing sql or tabId." },
+      tabId: typeof query?.tabId === "string" ? query.tabId : "",
+    });
+    return;
+  }
+
+  const { sql, tabId } = query;
+  const { maxRows } = getConfig();
+  tabSqlMap.set(tabId, sql);
+  try {
+    const result = await engine.executeQuery(sql, maxRows);
+    panel?.webview.postMessage({ type: "queryResult", payload: result, tabId });
+  } catch (err: unknown) {
+    panel?.webview.postMessage({
+      type: "queryError",
+      payload: { message: (err as Error).message },
+      tabId,
+    });
+  }
+}
+
+async function handleExportResults(payload: unknown, engine: DuckDBEngine): Promise<void> {
+  const request = payload as { tabId?: string; format?: string } | null | undefined;
+  if (!request || typeof request.tabId !== "string" || typeof request.format !== "string") {
+    panel?.webview.postMessage({
+      type: "exportError",
+      payload: { message: "Malformed export request: missing tabId or format." },
+      tabId: request?.tabId ?? "",
+    });
+    return;
+  }
+
+  const { tabId, format } = request;
+  if (!VALID_EXPORT_FORMATS.has(format)) {
+    panel?.webview.postMessage({
+      type: "exportError",
+      payload: { message: `Unsupported export format: "${format}". Use "csv" or "parquet".` },
+      tabId,
+    });
+    return;
+  }
+
+  const exportFormat = format as ExportFormat;
+  const filterLabel = exportFormat === "csv" ? "CSV Files" : "Parquet Files";
+  const ext = exportFormat === "csv" ? "csv" : "parquet";
+  const uri = await vscode.window.showSaveDialog({
+    filters: { [filterLabel]: [ext] },
+    defaultUri: vscode.Uri.file(`export.${ext}`),
+  });
+  if (!uri) return;
+
+  const sql = tabSqlMap.get(tabId);
+  if (!sql) {
+    panel?.webview.postMessage({
+      type: "exportError",
+      payload: { message: "No query to export. Run a query first." },
+      tabId,
+    });
+    return;
+  }
+
+  try {
+    await engine.exportQuery(sql, uri.fsPath, exportFormat);
+    panel?.webview.postMessage({
+      type: "exportResult",
+      payload: { path: uri.fsPath, format: exportFormat },
+      tabId,
+    });
+  } catch (err: unknown) {
+    panel?.webview.postMessage({
+      type: "exportError",
+      payload: { message: (err as Error).message },
+      tabId,
+    });
+  }
 }
 
 function sendTables(tables: TableEntry[]): void {

@@ -48,9 +48,15 @@ export class TableRegistry {
   }
 
   rename(oldName: string, newName: string): boolean {
+    if (oldName === newName) {
+      return this.tables.has(oldName);
+    }
     const entry = this.tables.get(oldName);
     if (!entry) {
       return false;
+    }
+    if (this.tables.has(newName)) {
+      throw new Error(`Table "${newName}" already exists`);
     }
     this.tables.delete(oldName);
     entry.name = newName;

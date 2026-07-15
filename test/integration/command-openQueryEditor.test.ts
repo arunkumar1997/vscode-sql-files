@@ -92,4 +92,59 @@ describe("Command — openQueryEditor", () => {
     expect(Number(queryResult.payload.rows[0].cnt)).toBe(5);
     expect(queryResult.payload.truncated).toBe(false);
   });
+
+  it.each([
+    ["missing payload", { type: "runQuery" }],
+    ["null payload", { type: "runQuery", payload: null }],
+    ["wrong payload types", { type: "runQuery", payload: { sql: 42, tabId: true } }],
+  ])("handles runQuery with %s", async (_case, message) => {
+    harness = await createEngine();
+    const registry = new TableRegistry();
+    registry.add({
+      name: "sales",
+      filePath: path.join(FIXTURES, "sales.csv"),
+      fileType: "csv",
+      isS3: false,
+    });
+
+    let messageHandler: ((msg: unknown) => Promise<void>) | undefined;
+    const postedMessages: any[] = [];
+    const mockPanel = {
+      webview: {
+        postMessage: vi.fn((postedMessage: unknown) => {
+          postedMessages.push(postedMessage);
+          return Promise.resolve(true);
+        }),
+        onDidReceiveMessage: vi.fn((handler: (msg: unknown) => Promise<void>) => {
+          messageHandler = handler;
+          return { dispose: vi.fn() };
+        }),
+        asWebviewUri: vi.fn((uri: unknown) => uri),
+        cspSource: "test",
+        html: "",
+      },
+      reveal: vi.fn(),
+      onDidDispose: vi.fn((handler: () => void) => {
+        disposeHandler = handler;
+        return { dispose: vi.fn() };
+      }),
+      dispose: vi.fn(),
+    };
+    (window.createWebviewPanel as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockPanel);
+    const context = {
+      extensionUri: Uri.file("/fake/extension"),
+      subscriptions: [] as { dispose: () => void }[],
+    };
+    const executeSpy = vi.spyOn(harness.engine, "executeQuery");
+
+    openQueryEditor(context as never, registry, harness.engine);
+    await expect(messageHandler!(message)).resolves.toBeUndefined();
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(postedMessages).toContainEqual({
+      type: "queryError",
+      payload: { message: expect.stringMatching(/malformed/i) },
+      tabId: "",
+    });
+  });
 });
