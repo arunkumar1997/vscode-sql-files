@@ -39,6 +39,38 @@ export function cleanupTempDir(): void {
   }
 }
 
+/**
+ * Create a unique per-load temp directory for S3 downloads.
+ * Uses random IDs only (never table names) to avoid path-injection.
+ * Returns the path. Caller owns cleanup (on failure, cancel, or unload).
+ */
+export function createPerLoadTempDir(): string {
+  const base = ensureTempDir();
+  return fs.mkdtempSync(path.join(base, "load-"));
+}
+
+/**
+ * Cleanup a specific per-load temp directory.
+ * Best-effort — swallows errors. Safe to call on non-existent paths.
+ * Only deletes paths that are children of the session temp root.
+ */
+export function cleanupPerLoadTempDir(tempPath: string): void {
+  if (!tempPath || !_tempDir) {
+    return;
+  }
+  // Safety: only delete paths that are proper children of our session temp dir
+  const resolved = path.resolve(tempPath);
+  const root = path.resolve(_tempDir);
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+    return;
+  }
+  try {
+    fs.rmSync(resolved, { recursive: true, force: true });
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
 export function parseS3Uri(uri: string): S3ParseResult | null {
   const match = uri.match(/^s3:\/\/([^/]+)\/?(.*)$/);
   if (!match) {
@@ -68,6 +100,7 @@ export async function resolveAwsCredentials(profile: string): Promise<{
 export async function detectBucketRegion(
   bucket: string,
   credentials: { keyId: string; secret: string; token?: string },
+  abortSignal?: AbortSignal,
 ): Promise<string> {
   const { S3Client, GetBucketLocationCommand } =
     await import("@aws-sdk/client-s3");
@@ -82,6 +115,7 @@ export async function detectBucketRegion(
   });
   const resp = await client.send(
     new GetBucketLocationCommand({ Bucket: bucket }),
+    { abortSignal },
   );
   // LocationConstraint is null/undefined for us-east-1 buckets
   return resp.LocationConstraint ?? "us-east-1";
@@ -92,6 +126,7 @@ export async function listS3Keys(
   prefix: string,
   region: string,
   credentials: { keyId: string; secret: string; token?: string },
+  abortSignal?: AbortSignal,
 ): Promise<string[]> {
   const { S3Client, ListObjectsV2Command } = await import("@aws-sdk/client-s3");
   const client = new S3Client({
@@ -107,12 +142,16 @@ export async function listS3Keys(
   let continuationToken: string | undefined;
 
   do {
+    if (abortSignal?.aborted) {
+      throw new Error("Cancelled");
+    }
     const resp = await client.send(
       new ListObjectsV2Command({
         Bucket: bucket,
         Prefix: prefix,
         ContinuationToken: continuationToken,
       }),
+      { abortSignal },
     );
     for (const obj of resp.Contents ?? []) {
       if (obj.Key) {
@@ -132,10 +171,15 @@ export async function downloadS3File(
   destPath: string,
   credentials: { keyId: string; secret: string; token?: string },
   region: string,
+  abortSignal?: AbortSignal,
 ): Promise<void> {
   const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
   const { pipeline } = await import("stream/promises");
   const { createWriteStream } = await import("fs");
+
+  if (abortSignal?.aborted) {
+    throw new Error("Cancelled");
+  }
 
   const client = new S3Client({
     region,
@@ -148,8 +192,25 @@ export async function downloadS3File(
 
   const resp = await client.send(
     new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { abortSignal },
   );
-  await pipeline(resp.Body as any, createWriteStream(destPath));
+  const pipelineArgs: [any, any, ...any[]] = [resp.Body as any, createWriteStream(destPath)];
+  if (abortSignal) {
+    pipelineArgs.push({ signal: abortSignal });
+  }
+  await pipeline(...pipelineArgs);
+}
+
+/**
+ * Validate that a resolved destination path stays inside the intended base directory.
+ * Prevents directory traversal attacks from malicious S3 object keys.
+ */
+function assertContainedPath(base: string, destination: string, key: string): void {
+  const resolvedBase = path.resolve(base);
+  const resolvedDest = path.resolve(destination);
+  if (!resolvedDest.startsWith(resolvedBase + path.sep) && resolvedDest !== resolvedBase) {
+    throw new Error(`S3 key "${key}" resolves outside temp directory (path traversal rejected)`);
+  }
 }
 
 // Download a folder of part-files into a single local dir and return ONE table entry.
@@ -175,32 +236,37 @@ export async function downloadS3Folder(
   const fileType = detectFileType(supportedKeys[0])!;
   const ext = path.extname(supportedKeys[0]); // e.g. ".parquet"
 
-  const tempDir = ensureTempDir();
-  const localDir = path.join(tempDir, tableName);
-  fs.mkdirSync(localDir, { recursive: true });
+  const localDir = createPerLoadTempDir();
 
-  for (const key of supportedKeys) {
-    const filename = path.basename(key);
-    progress.report({ message: `Downloading ${filename}…` });
-    await downloadS3File(
-      bucket,
-      key,
-      path.join(localDir, filename),
-      credentials,
-      region,
-    );
+  try {
+    for (const key of supportedKeys) {
+      const filename = path.basename(key);
+      const destPath = path.join(localDir, filename);
+      assertContainedPath(localDir, destPath, key);
+      progress.report({ message: `Downloading ${filename}…` });
+      await downloadS3File(
+        bucket,
+        key,
+        destPath,
+        credentials,
+        region,
+      );
+    }
+
+    // DuckDB glob — reads all matching files as one table
+    const globPath = path.join(localDir, `*${ext}`);
+
+    return {
+      name: tableName,
+      filePath: globPath,
+      sourceUri: `s3://${bucket}/${prefix}`,
+      fileType,
+      isS3: true,
+    };
+  } catch (err) {
+    cleanupPerLoadTempDir(localDir);
+    throw err;
   }
-
-  // DuckDB glob — reads all matching files as one table
-  const globPath = path.join(localDir, `*${ext}`);
-
-  return {
-    name: tableName,
-    filePath: globPath,
-    sourceUri: `s3://${bucket}/${prefix}`,
-    fileType,
-    isS3: true,
-  };
 }
 
 /**
@@ -226,29 +292,35 @@ export async function downloadS3HiveFolder(
   const tableName = deriveTableName(
     includeExtensionInName ? `${folderSegment}_${ext.slice(1)}` : folderSegment,
   );
-  const localDir = fs.mkdtempSync(path.join(ensureTempDir(), `${tableName}-`));
+  const localDir = createPerLoadTempDir();
 
-  for (const key of keys) {
-    const relativePath = key.slice(prefix.length);
-    const parts = relativePath.split("/");
-    if (!relativePath || parts.some((part) => part === "" || part === "." || part === "..")) {
-      throw new Error(`Invalid object key for Hive dataset: ${key}`);
+  try {
+    for (const key of keys) {
+      const relativePath = key.slice(prefix.length);
+      const parts = relativePath.split("/");
+      if (!relativePath || parts.some((part) => part === "" || part === "." || part === "..")) {
+        throw new Error(`Invalid object key for Hive dataset: ${key}`);
+      }
+
+      const destination = path.join(localDir, ...parts);
+      assertContainedPath(localDir, destination, key);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      progress.report({ message: `Downloading ${path.basename(key)}…` });
+      await downloadS3File(bucket, key, destination, credentials, region);
     }
 
-    const destination = path.join(localDir, ...parts);
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    progress.report({ message: `Downloading ${path.basename(key)}…` });
-    await downloadS3File(bucket, key, destination, credentials, region);
+    return {
+      name: tableName,
+      filePath: path.join(localDir, "**", `*${ext}`),
+      sourceUri: `s3://${bucket}/${prefix}`,
+      fileType,
+      isS3: true,
+      hivePartitioning: true,
+    };
+  } catch (err) {
+    cleanupPerLoadTempDir(localDir);
+    throw err;
   }
-
-  return {
-    name: tableName,
-    filePath: path.join(localDir, "**", `*${ext}`),
-    sourceUri: `s3://${bucket}/${prefix}`,
-    fileType,
-    isS3: true,
-    hivePartitioning: true,
-  };
 }
 
 // Build TableEntry list by downloading individual S3 objects to temp dir (single-file paths)
@@ -259,39 +331,45 @@ export async function downloadS3Entries(
   region: string,
   progress: vscode.Progress<{ message?: string }>,
 ): Promise<TableEntry[]> {
-  const tempDir = ensureTempDir();
+  const localDir = createPerLoadTempDir();
   const entries: TableEntry[] = [];
   const names = new Set<string>();
 
   const supportedKeys = keys.filter((k) => detectFileType(k) !== null);
 
-  for (const key of supportedKeys) {
-    const fileType = detectFileType(key)!;
-    let name = deriveTableName(key);
-    let suffix = 1;
-    const base = name;
-    while (names.has(name)) {
-      name = `${base}_${suffix++}`;
+  try {
+    for (const key of supportedKeys) {
+      const fileType = detectFileType(key)!;
+      let name = deriveTableName(key);
+      let suffix = 1;
+      const base = name;
+      while (names.has(name)) {
+        name = `${base}_${suffix++}`;
+      }
+      names.add(name);
+
+      const ext = path.extname(key);
+      const localPath = path.join(localDir, `${name}${ext}`);
+      assertContainedPath(localDir, localPath, key);
+      const s3Uri = `s3://${bucket}/${key}`;
+
+      progress.report({ message: `Downloading ${path.basename(key)}…` });
+      await downloadS3File(bucket, key, localPath, credentials, region);
+
+      entries.push({
+        name,
+        filePath: localPath, // DuckDB reads from here
+        sourceUri: s3Uri, // shown in UI
+        fileType,
+        isS3: true,
+      });
     }
-    names.add(name);
 
-    const ext = path.extname(key);
-    const localPath = path.join(tempDir, `${name}${ext}`);
-    const s3Uri = `s3://${bucket}/${key}`;
-
-    progress.report({ message: `Downloading ${path.basename(key)}…` });
-    await downloadS3File(bucket, key, localPath, credentials, region);
-
-    entries.push({
-      name,
-      filePath: localPath, // DuckDB reads from here
-      sourceUri: s3Uri, // shown in UI
-      fileType,
-      isS3: true,
-    });
+    return entries;
+  } catch (err) {
+    cleanupPerLoadTempDir(localDir);
+    throw err;
   }
-
-  return entries;
 }
 
 // Group S3 keys by their immediate parent prefix (leaf directory).

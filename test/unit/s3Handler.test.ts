@@ -18,16 +18,16 @@ vi.mock("@aws-sdk/credential-providers", () => ({
 vi.mock("@aws-sdk/client-s3", () => ({
   S3Client: class MockS3Client {
     send = mockSend;
-    destroy() {}
+    destroy() { }
   },
   GetBucketLocationCommand: class {
-    constructor(public input?: any) {}
+    constructor(public input?: any) { }
   },
   ListObjectsV2Command: class {
-    constructor(public input?: any) {}
+    constructor(public input?: any) { }
   },
   GetObjectCommand: class {
-    constructor(public input?: any) {}
+    constructor(public input?: any) { }
   },
 }));
 
@@ -336,6 +336,58 @@ describe("downloadS3File", () => {
     expect(mockSend).toHaveBeenCalledTimes(1);
     expect(mockCreateWriteStream).toHaveBeenCalledWith("/tmp/data.csv");
     expect(mockPipeline).toHaveBeenCalledWith(fakeBody, expect.anything());
+  });
+
+  it("passes AbortSignal to pipeline when provided", async () => {
+    const fakeBody = "fake-stream-body";
+    mockSend.mockResolvedValueOnce({ Body: fakeBody });
+    const ac = new AbortController();
+
+    await downloadS3File("bucket", "data.csv", "/tmp/data.csv", creds, "us-east-1", ac.signal);
+
+    expect(mockPipeline).toHaveBeenCalledWith(fakeBody, expect.anything(), { signal: ac.signal });
+  });
+
+  it("does not pass signal options to pipeline when no AbortSignal given", async () => {
+    const fakeBody = "fake-stream-body";
+    mockSend.mockResolvedValueOnce({ Body: fakeBody });
+
+    await downloadS3File("bucket", "data.csv", "/tmp/data.csv", creds, "us-east-1");
+
+    // Called with exactly 2 args (source, dest) — no options object
+    expect(mockPipeline).toHaveBeenCalledTimes(1);
+    expect(mockPipeline.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("rejects immediately when signal is already aborted", async () => {
+    const ac = new AbortController();
+    ac.abort();
+
+    await expect(
+      downloadS3File("bucket", "data.csv", "/tmp/data.csv", creds, "us-east-1", ac.signal),
+    ).rejects.toThrow("Cancelled");
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("abort during streaming rejects the pipeline", async () => {
+    const ac = new AbortController();
+
+    // Abort inside send so the pre-flight check passes but pipeline sees an aborted signal
+    mockSend.mockImplementation(async () => {
+      ac.abort();
+      return { Body: "fake-stream-body" };
+    });
+
+    mockPipeline.mockReset().mockImplementation(async (...args: any[]) => {
+      const opts = args.find((a: any) => a && typeof a === "object" && "signal" in a);
+      if (opts?.signal?.aborted) {
+        throw new Error("AbortError");
+      }
+    });
+
+    await expect(
+      downloadS3File("bucket", "data.csv", "/tmp/data.csv", creds, "us-east-1", ac.signal),
+    ).rejects.toThrow("AbortError");
   });
 });
 

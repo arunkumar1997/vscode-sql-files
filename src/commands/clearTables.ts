@@ -6,6 +6,15 @@ export async function clearTables(
   registry: TableRegistry,
   engine: DuckDBEngine,
 ): Promise<void> {
+  // Guard: block clear if any table is loading
+  const loading = registry.getAll().filter((e) => e.loadState === "loading");
+  if (loading.length > 0) {
+    vscode.window.showWarningMessage(
+      `File SQL: Cannot clear — ${loading.length} table(s) are currently loading.`,
+    );
+    return;
+  }
+
   const confirm = await vscode.window.showWarningMessage(
     "Remove all loaded tables?",
     { modal: true },
@@ -30,6 +39,17 @@ export async function removeTable(
   registry: TableRegistry,
   engine: DuckDBEngine,
 ): Promise<void> {
+  const entry = registry.get(tableName);
+  if (!entry) {
+    return;
+  }
+  // Guard: block remove during loading
+  if (entry.loadState === "loading") {
+    vscode.window.showWarningMessage(
+      `File SQL: Cannot remove "${tableName}" while it is loading.`,
+    );
+    return;
+  }
   try {
     await engine.dropTable(tableName);
   } catch {

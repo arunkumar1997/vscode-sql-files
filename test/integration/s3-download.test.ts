@@ -124,3 +124,113 @@ describe("S3 download → DuckDB integration", () => {
     expect(Number(result.rows[0].cnt)).toBe(6);
   });
 });
+
+describe("downloadS3File abort mid-stream (real pipeline)", () => {
+  let tempDir: TempDir;
+
+  afterEach(() => {
+    tempDir?.cleanup();
+    cleanupTempDir();
+    mockSend.mockReset();
+  });
+
+  it("rejects with AbortError and tears down streams after data reaches disk", async () => {
+    tempDir = createTempDir();
+    const destPath = path.join(tempDir.path, "abort-mid.csv");
+    const ac = new AbortController();
+
+    // Full payload the source *would* deliver if not aborted
+    const HEADER = "id,name\n";
+    const ROW = "1,alice\n";
+    const CHUNK_SIZE = 4096;
+    const TOTAL_CHUNKS = 50;
+    const firstChunk = Buffer.from(HEADER + ROW.repeat(CHUNK_SIZE));
+    const fullPayloadSize = firstChunk.length * TOTAL_CHUNKS;
+
+    let firstChunkPushed = false;
+    let bytesOnDiskBeforeAbort = -1;
+    let chunksDelivered = 0;
+
+    // Poll destPath with bounded retries until it has nonzero bytes.
+    // Resolves with the observed size, or rejects after the guard limit.
+    function waitForNonzeroFile(filePath: string, maxTicks: number): Promise<number> {
+      return new Promise<number>((resolve, reject) => {
+        let ticks = 0;
+        function check() {
+          ticks++;
+          try {
+            const stat = fs.statSync(filePath);
+            if (stat.size > 0) {
+              return resolve(stat.size);
+            }
+          } catch {
+            // file may not exist yet
+          }
+          if (ticks >= maxTicks) {
+            return reject(new Error(`File never reached nonzero bytes after ${maxTicks} ticks`));
+          }
+          setImmediate(check);
+        }
+        setImmediate(check);
+      });
+    }
+
+    // Custom Readable: pushes one large chunk, waits for bytes on disk,
+    // then fires abort — keeping the source open the whole time.
+    const source = new Readable({
+      read() {
+        if (!firstChunkPushed) {
+          firstChunkPushed = true;
+          chunksDelivered++;
+          this.push(firstChunk);
+
+          // After pushing the chunk, poll until the destination file
+          // has nonzero bytes — only *then* fire abort.
+          waitForNonzeroFile(destPath, 200).then((size) => {
+            bytesOnDiskBeforeAbort = size;
+            ac.abort();
+          }).catch(() => {
+            // Guard: if file never appeared, abort anyway to avoid hanging
+            ac.abort();
+          });
+        } else if (!ac.signal.aborted) {
+          // Keep delivering more data so the stream stays active
+          chunksDelivered++;
+          this.push(firstChunk);
+        }
+        // Once aborted, stop pushing — pipeline teardown handles the rest
+      },
+    });
+
+    mockSend.mockResolvedValueOnce({ Body: source });
+
+    const rejection = downloadS3File(
+      "test-bucket",
+      "data.csv",
+      destPath,
+      FAKE_CREDS,
+      "us-east-1",
+      ac.signal,
+    );
+
+    // Must reject — pipeline must NOT resolve successfully
+    const err: any = await rejection.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.code).toBe("ABORT_ERR");
+
+    // Abort happened mid-stream, not pre-stream
+    expect(firstChunkPushed).toBe(true);
+
+    // We observed nonzero bytes on disk *before* aborting
+    expect(bytesOnDiskBeforeAbort).toBeGreaterThan(0);
+
+    // Source stream must be destroyed (pipeline teardown)
+    expect(source.destroyed).toBe(true);
+
+    // Destination file must exist with partial data
+    expect(fs.existsSync(destPath)).toBe(true);
+    const finalSize = fs.statSync(destPath).size;
+    expect(finalSize).toBeGreaterThan(0);
+    expect(finalSize).toBeLessThan(fullPayloadSize);
+  });
+});

@@ -341,7 +341,7 @@ async function handleLocalPath(
       );
       return;
     }
-    await registerEntries([entry], registry, engine, { report: () => {} });
+    await registerEntries([entry], registry, engine, { report: () => { } });
     log("Successfully loaded 1 table from local file");
     vscode.window.showInformationMessage("File SQL: Loaded 1 table.");
     if (!isQueryEditorOpen()) {
@@ -356,6 +356,14 @@ async function registerEntries(
   engine: DuckDBEngine,
   progress: vscode.Progress<{ message?: string }>,
 ): Promise<void> {
+  try {
+    await engine.ensureInitialized();
+  } catch (err: unknown) {
+    vscode.window.showErrorMessage(
+      `File SQL: DuckDB failed to initialize — ${(err as Error).message}`,
+    );
+    return;
+  }
   for (const entry of entries) {
     progress.report({ message: `Registering ${entry.name}…` });
     try {
