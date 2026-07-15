@@ -8,7 +8,7 @@
 
 ## Bugs surfaced by tests
 
-- **[Phase 1] `TableRegistry.rename()` silently overwrites existing target.** If newName already exists, old entry is replaced with no error / no `false` return. Test `overwrites destination if newName already exists (potential bug)` in `test/unit/tableRegistry.test.ts` documents this. **Action:** file GitHub issue after sprint, do not fix during testing sprint.
+- **[Phase 1] `TableRegistry.rename()` silently overwrites existing target.** If newName already exists, old entry is replaced with no error / no `false` return. Test `overwrites destination if newName already exists (potential bug)` in `test/unit/tableRegistry.test.ts` documents this. **Filed as [#8](https://github.com/arunkumar1997/vscode-sql-files/issues/8).**
 
 ## Legend
 - ⏳ In progress
