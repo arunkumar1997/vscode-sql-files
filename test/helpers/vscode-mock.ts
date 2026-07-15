@@ -31,15 +31,24 @@ export const Uri = {
       return { scheme: "", fsPath: s, path: s, toString: () => s };
     }
   },
+  joinPath: (base: { path: string; toString: () => string }, ...segments: string[]) => {
+    const { join } = require("path");
+    const joined = join(base.path, ...segments);
+    return { scheme: "file", fsPath: joined, path: joined, toString: () => `file://${joined}` };
+  },
 };
 
 // --- window ---
 export const window = {
   showInputBox: vi.fn(),
   showOpenDialog: vi.fn(),
+  showQuickPick: vi.fn(),
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showWarningMessage: vi.fn(),
+  withProgress: vi.fn(async (_options: unknown, task: (progress: { report: (...a: unknown[]) => void }) => Promise<unknown>) => {
+    return task({ report: vi.fn() });
+  }),
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
     append: vi.fn(),
@@ -47,6 +56,7 @@ export const window = {
     clear: vi.fn(),
     dispose: vi.fn(),
   })),
+  createWebviewPanel: vi.fn(),
 };
 
 // --- workspace ---
@@ -93,6 +103,55 @@ export class ThemeIcon {
   id: string;
   constructor(id: string) {
     this.id = id;
+  }
+}
+
+// --- ProgressLocation ---
+export enum ProgressLocation {
+  SourceControl = 1,
+  Window = 10,
+  Notification = 15,
+}
+
+// --- ViewColumn ---
+export enum ViewColumn {
+  Active = -1,
+  Beside = -2,
+  One = 1,
+  Two = 2,
+  Three = 3,
+}
+
+// --- CompletionItem ---
+export class CompletionItem {
+  label: string;
+  kind?: number;
+  detail?: string;
+  documentation?: string;
+  constructor(label: string, kind?: number) {
+    this.label = label;
+    this.kind = kind;
+  }
+}
+
+// --- CompletionItemKind ---
+export enum CompletionItemKind {
+  Text = 0,
+  Method = 1,
+  Function = 2,
+  Constructor = 3,
+  Field = 4,
+  Variable = 5,
+  Class = 6,
+}
+
+// --- Position ---
+export class Position {
+  line: number;
+  character: number;
+  constructor(line: number, character: number) {
+    this.line = line;
+    this.character = character;
   }
 }
 

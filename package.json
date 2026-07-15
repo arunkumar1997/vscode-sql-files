@@ -183,6 +183,8 @@
     "package:all": "node scripts/package.mjs --all",
     "package:target": "node scripts/package.mjs --target",
     "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test": "npm run test:unit && npm run test:integration",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage"
   },
