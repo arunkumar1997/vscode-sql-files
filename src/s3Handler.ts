@@ -3,13 +3,19 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
-import { TableEntry } from "./types";
+import { FileType, TableEntry } from "./types";
 import { detectFileType, deriveTableName } from "./fileScanner";
 
 interface S3ParseResult {
   bucket: string;
   prefix: string;
   isFolder: boolean;
+}
+
+export interface S3FileGroup {
+  fileType: FileType;
+  ext: string;
+  keys: string[];
 }
 
 // Session-scoped temp directory, created on first use
@@ -196,6 +202,54 @@ export async function downloadS3Folder(
   };
 }
 
+/**
+ * Download a Hive-style dataset without flattening its key=value
+ * directory structure, then register it as one partitioned table.
+ */
+export async function downloadS3HiveFolder(
+  bucket: string,
+  prefix: string,
+  keys: string[],
+  credentials: { keyId: string; secret: string; token?: string },
+  region: string,
+  progress: vscode.Progress<{ message?: string }>,
+  fileType: FileType,
+  ext: string,
+  includeExtensionInName: boolean,
+): Promise<TableEntry | null> {
+  if (keys.length === 0) {
+    return null;
+  }
+
+  const folderSegment = prefix.replace(/\/$/, "").split("/").pop() ?? "table";
+  const tableName = deriveTableName(
+    includeExtensionInName ? `${folderSegment}_${ext.slice(1)}` : folderSegment,
+  );
+  const localDir = fs.mkdtempSync(path.join(ensureTempDir(), `${tableName}-`));
+
+  for (const key of keys) {
+    const relativePath = key.slice(prefix.length);
+    const parts = relativePath.split("/");
+    if (!relativePath || parts.some((part) => part === "" || part === "." || part === "..")) {
+      throw new Error(`Invalid object key for Hive dataset: ${key}`);
+    }
+
+    const destination = path.join(localDir, ...parts);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    progress.report({ message: `Downloading ${path.basename(key)}…` });
+    await downloadS3File(bucket, key, destination, credentials, region);
+  }
+
+  return {
+    name: tableName,
+    filePath: path.join(localDir, "**", `*${ext}`),
+    sourceUri: `s3://${bucket}/${prefix}`,
+    fileType,
+    isS3: true,
+    hivePartitioning: true,
+  };
+}
+
 // Build TableEntry list by downloading individual S3 objects to temp dir (single-file paths)
 export async function downloadS3Entries(
   bucket: string,
@@ -251,6 +305,78 @@ export function groupKeysByLeafPrefix(keys: string[]): Map<string, string[]> {
     groups.get(dir)!.push(key);
   }
   return groups;
+}
+
+/** Group supported S3 files by reader type and extension. */
+export function groupS3KeysByFileType(keys: string[]): S3FileGroup[] {
+  const groups = new Map<string, S3FileGroup>();
+  for (const key of keys) {
+    const fileType = detectFileType(key);
+    if (!fileType) {
+      continue;
+    }
+    const ext = path.extname(key);
+    const groupKey = `${fileType}:${ext.toLowerCase()}`;
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, { fileType, ext, keys: [] });
+    }
+    groups.get(groupKey)!.keys.push(key);
+  }
+  return Array.from(groups.values());
+}
+
+/**
+ * Find the highest S3 prefixes that contain supported files below one or more
+ * Hive-style key=value directory levels. The returned prefixes are disjoint,
+ * so each file-type group becomes one table.
+ */
+export function findHivePartitionPrefixes(
+  keys: string[],
+  rootPrefix: string,
+): string[] {
+  const normalizedRoot = rootPrefix === "" || rootPrefix.endsWith("/")
+    ? rootPrefix
+    : `${rootPrefix}/`;
+  const candidates = new Set<string>([normalizedRoot]);
+
+  for (const key of keys) {
+    let directory = key.slice(0, key.lastIndexOf("/") + 1);
+    while (directory.startsWith(normalizedRoot)) {
+      candidates.add(directory);
+      if (directory === normalizedRoot) {
+        break;
+      }
+      directory = directory.slice(0, directory.slice(0, -1).lastIndexOf("/") + 1);
+    }
+  }
+
+  const hivePrefixes = Array.from(candidates).filter((candidate) =>
+    isHivePartitionedS3Prefix(candidate, keys),
+  );
+
+  return hivePrefixes.filter(
+    (candidate) =>
+      !hivePrefixes.some(
+        (ancestor) => ancestor !== candidate && candidate.startsWith(ancestor),
+      ),
+  );
+}
+
+function isHivePartitionedS3Prefix(prefix: string, keys: string[]): boolean {
+  const dataKeys = keys.filter((key) =>
+    key.startsWith(prefix) && detectFileType(key) !== null,
+  );
+  if (dataKeys.length === 0) {
+    return false;
+  }
+
+  return dataKeys.every((key) => {
+    const pathParts = key.slice(prefix.length).split("/");
+    const directories = pathParts.slice(0, -1);
+    return directories.length > 0 && directories.every((part) =>
+      /^[A-Za-z_][A-Za-z0-9_]*=.+$/.test(part),
+    );
+  });
 }
 
 export function entryFromS3File(
