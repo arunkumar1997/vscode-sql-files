@@ -13,12 +13,18 @@ import { cleanupTempDir } from "./s3Handler";
 import { TableEntry } from "./types";
 import { initLogger, log, logError } from "./logger";
 
+/** Exposed only when running inside the VS Code test host. */
+export interface TestApi {
+  getEngine(): DuckDBEngine | undefined;
+  getRegistry(): TableRegistry | undefined;
+}
+
 let engine: DuckDBEngine | undefined;
 let registry: TableRegistry | undefined;
 
 export async function activate(
   context: vscode.ExtensionContext,
-): Promise<void> {
+): Promise<TestApi | void> {
   initLogger();
   log("File SQL extension activating...");
 
@@ -148,6 +154,14 @@ export async function activate(
       },
     ),
   );
+
+  // Expose test API only when running in the Extension Development Host
+  if (context.extensionMode === vscode.ExtensionMode.Test) {
+    return {
+      getEngine: () => engine,
+      getRegistry: () => registry,
+    };
+  }
 }
 
 /** Re-register persisted tables with DuckDB in the background. */

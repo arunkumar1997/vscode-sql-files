@@ -4,7 +4,7 @@
 | ------------------ | ---------------- | ----------------------------- | ----------- | ----- |
 | 1. Unit tests      | Sage-Unit        | feature/testing-unit          | ✅ merged   | 103 tests, 85–100% coverage, merge commit c676837 |
 | 2. Integration     | Nova-Integration | feature/testing-integration   | ✅ Done   | 17 tests across 13 files, ~1.1s wall-clock, zero flakes |
-| 3. E2E             | Ivy-E2E          | feature/testing-e2e           | ⏳ in progress | Runs in parallel with Phase 2 |
+| 3. E2E             | Ivy-E2E          | feature/testing-e2e           | ✅ Done     | 7 tests (5 suites), @vscode/test-electron + Mocha, ~3s wall-clock |
 
 ## Bugs surfaced by tests
 

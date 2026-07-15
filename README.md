@@ -196,6 +196,17 @@ Two esbuild bundles are produced by `esbuild.mjs`:
 | Extension host | `src/extension.ts`     | `dist/extension.js`                    | Node.js CJS (`duckdb` externalized) |
 | Webview        | `src/webview/main.tsx` | `dist/webview.js` + `dist/webview.css` | Browser IIFE                        |
 
+### Testing
+
+```bash
+npm run test:unit         # Vitest unit tests
+npm run test:integration  # Vitest integration tests (real DuckDB)
+npm run test:e2e          # Full E2E in a real VS Code instance
+npm test                  # All three
+```
+
+E2E tests require a display server. On CI or headless Linux use `xvfb-run -a npm run test:e2e`.
+
 ---
 
 ## 🗺️ Roadmap
