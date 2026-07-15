@@ -151,32 +151,57 @@ describe("downloadS3File abort mid-stream (real pipeline)", () => {
     let bytesOnDiskBeforeAbort = -1;
     let chunksDelivered = 0;
 
-    // Poll destPath with bounded retries until it has nonzero bytes.
-    // Resolves with the observed size, or rejects after the guard limit.
-    function waitForNonzeroFile(filePath: string, maxTicks: number): Promise<number> {
+    // Wait for the destination file to have nonzero bytes using OS-level
+    // fs.watch (inotify on Linux). This is event-driven: the OS notifies
+    // us when an actual fs.write() completes on the file, eliminating the
+    // bounded setImmediate polling that was unreliable on CI.
+    function waitForBytesOnDisk(filePath: string, timeoutMs = 5000): Promise<number> {
       return new Promise<number>((resolve, reject) => {
-        let ticks = 0;
-        function check() {
-          ticks++;
+        let settled = false;
+        let watcher: fs.FSWatcher | undefined;
+        const dir = path.dirname(filePath);
+
+        const settle = (size: number) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try { watcher?.close(); } catch { /* best effort */ }
+          resolve(size);
+        };
+        const fail = (msg: string) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try { watcher?.close(); } catch { /* best effort */ }
+          reject(new Error(msg));
+        };
+
+        const timer = setTimeout(() => fail(
+          `File ${filePath} never reached nonzero bytes within ${timeoutMs}ms`,
+        ), timeoutMs);
+
+        const tryResolve = () => {
           try {
-            const stat = fs.statSync(filePath);
-            if (stat.size > 0) {
-              return resolve(stat.size);
-            }
-          } catch {
-            // file may not exist yet
-          }
-          if (ticks >= maxTicks) {
-            return reject(new Error(`File never reached nonzero bytes after ${maxTicks} ticks`));
-          }
-          setImmediate(check);
-        }
-        setImmediate(check);
+            const s = fs.statSync(filePath);
+            if (s.size > 0) { settle(s.size); return true; }
+          } catch { /* file may not exist yet */ }
+          return false;
+        };
+
+        // Immediate check (handles already-written case)
+        if (tryResolve()) return;
+
+        // Watch directory — Linux inotify fires 'change' for file writes
+        watcher = fs.watch(dir, () => { tryResolve(); });
+        watcher.on("error", () => fail("fs.watch error"));
+
+        // Re-check after watcher is live to close the setup race
+        tryResolve();
       });
     }
 
-    // Custom Readable: pushes one large chunk, waits for bytes on disk,
-    // then fires abort — keeping the source open the whole time.
+    // Custom Readable: pushes chunks continuously. Once waitForBytesOnDisk
+    // resolves (proving fs.write completed), we fire abort mid-stream.
     const source = new Readable({
       read() {
         if (!firstChunkPushed) {
@@ -184,17 +209,16 @@ describe("downloadS3File abort mid-stream (real pipeline)", () => {
           chunksDelivered++;
           this.push(firstChunk);
 
-          // After pushing the chunk, poll until the destination file
-          // has nonzero bytes — only *then* fire abort.
-          waitForNonzeroFile(destPath, 200).then((size) => {
+          // Event-driven wait for bytes on disk, then abort
+          waitForBytesOnDisk(destPath).then((size) => {
             bytesOnDiskBeforeAbort = size;
             ac.abort();
           }).catch(() => {
-            // Guard: if file never appeared, abort anyway to avoid hanging
+            // Safety: abort anyway to avoid hanging test
             ac.abort();
           });
         } else if (!ac.signal.aborted) {
-          // Keep delivering more data so the stream stays active
+          // Keep stream active so the pipeline doesn't end early
           chunksDelivered++;
           this.push(firstChunk);
         }
@@ -220,6 +244,7 @@ describe("downloadS3File abort mid-stream (real pipeline)", () => {
 
     // Abort happened mid-stream, not pre-stream
     expect(firstChunkPushed).toBe(true);
+    expect(chunksDelivered).toBeGreaterThanOrEqual(1);
 
     // We observed nonzero bytes on disk *before* aborting
     expect(bytesOnDiskBeforeAbort).toBeGreaterThan(0);
