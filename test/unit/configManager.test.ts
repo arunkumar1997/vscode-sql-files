@@ -7,7 +7,10 @@ describe("configManager — saved queries", () => {
     beforeEach(() => {
         workspace.fs.writeFile.mockClear();
         workspace.fs.delete.mockClear();
-        workspace.fs.readDirectory.mockClear();
+        workspace.fs.readDirectory.mockReset().mockResolvedValue([]);
+        workspace.fs.readFile.mockReset().mockRejectedValue(
+            Object.assign(new Error("File not found"), { code: "FileNotFound" }),
+        );
     });
 
     it("reads sorted SQL files and ignores other entries", async () => {
@@ -30,6 +33,52 @@ describe("configManager — saved queries", () => {
         ]);
     });
 
+    it("restores exact query names and order from the managed manifest", async () => {
+        workspace.fs.readDirectory.mockResolvedValueOnce([
+            ["daily-sales.sql", FileType.File],
+            ["totals.sql", FileType.File],
+            [".filesql-managed.json", FileType.File],
+        ] as never);
+        workspace.fs.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+            if (uri.fsPath.endsWith(".filesql-managed.json")) {
+                return Buffer.from(JSON.stringify({
+                    files: ["totals.sql", "daily-sales.sql"],
+                    queries: [
+                        { name: "Totals / Final", file: "totals.sql" },
+                        { name: "Daily: Sales", file: "daily-sales.sql" },
+                    ],
+                }));
+            }
+            return Buffer.from(uri.fsPath.endsWith("totals.sql") ? "SELECT 2" : "SELECT 1");
+        });
+
+        await expect(readSavedQueries(Uri.file("/workspace") as never)).resolves.toEqual([
+            { name: "Totals / Final", sql: "SELECT 2" },
+            { name: "Daily: Sales", sql: "SELECT 1" },
+        ]);
+    });
+
+    it("preserves file order from legacy manifests", async () => {
+        workspace.fs.readDirectory.mockResolvedValueOnce([
+            ["first.sql", FileType.File],
+            ["second.sql", FileType.File],
+            [".filesql-managed.json", FileType.File],
+        ] as never);
+        workspace.fs.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+            if (uri.fsPath.endsWith(".filesql-managed.json")) {
+                return Buffer.from(JSON.stringify({
+                    files: ["second.sql", "first.sql"],
+                }));
+            }
+            return Buffer.from(uri.fsPath.endsWith("first.sql") ? "SELECT 1" : "SELECT 2");
+        });
+
+        await expect(readSavedQueries(Uri.file("/workspace") as never)).resolves.toEqual([
+            { name: "second", sql: "SELECT 2" },
+            { name: "first", sql: "SELECT 1" },
+        ]);
+    });
+
     it("writes query tabs as SQL files with sanitized names (via temp+rename)", async () => {
         await writeSavedQueries(Uri.file("/workspace") as never, [
             { name: "daily/sales", sql: "SELECT * FROM sales" },
@@ -40,7 +89,7 @@ describe("configManager — saved queries", () => {
         const renameCalls = workspace.fs.rename.mock.calls;
         const finalPaths = renameCalls.map((c: [{ path: string }, { path: string }]) => c[1].path);
         expect(finalPaths.some((p: string) => p.match(/daily-sales\.sql$/))).toBe(true);
-        expect(finalPaths.some((p: string) => p.match(/daily-sales-2\.sql$/))).toBe(true);
+        expect(finalPaths.some((p: string) => p.match(/daily-sales \(2\)\.sql$/))).toBe(true);
 
         // Content goes through writeFile (to temp)
         const writeCalls = workspace.fs.writeFile.mock.calls;

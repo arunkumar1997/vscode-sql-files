@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import path from "path";
 import { createEngine, EngineHarness } from "../helpers/duckdbHarness";
 import { TableRegistry } from "../../src/tableRegistry";
-import { getWorkspaceQueries, openQueryEditor, requestQueryTabsSnapshot, setWorkspaceQueries } from "../../src/commands/openQueryEditor";
+import { createTableQuery, getWorkspaceQueries, openQueryEditor, requestQueryTabsSnapshot, setWorkspaceQueries } from "../../src/commands/openQueryEditor";
 import { window, Uri } from "../helpers/vscode-mock";
 import { TableEntry } from "../../src/types";
 
@@ -18,6 +18,25 @@ describe("Command — openQueryEditor", () => {
     harness?.dispose();
     vi.restoreAllMocks();
     setWorkspaceQueries([]);
+  });
+
+  it("builds a runnable query with a safely quoted table identifier", () => {
+    expect(createTableQuery('daily "sales"')).toEqual({
+      name: 'daily "sales"',
+      sql: 'SELECT *\nFROM "daily ""sales"""',
+    });
+  });
+
+  it("normalizes duplicate workspace query names without reordering", () => {
+    setWorkspaceQueries([
+      { name: "Report", sql: "SELECT 1" },
+      { name: "report", sql: "SELECT 2" },
+    ]);
+
+    expect(getWorkspaceQueries()).toEqual([
+      { name: "Report", sql: "SELECT 1" },
+      { name: "report (2)", sql: "SELECT 2" },
+    ]);
   });
 
   it("restores saved queries on ready and records later tab changes", async () => {
@@ -60,12 +79,18 @@ describe("Command — openQueryEditor", () => {
       subscriptions: [] as { dispose: () => void }[],
     };
 
-    openQueryEditor(context as never, registry, harness.engine);
+    openQueryEditor(context as never, registry, harness.engine, "sales");
     await messageHandler!({ type: "ready" });
 
     expect(postedMessages).toContainEqual({
       type: "savedQueries",
       payload: { queries: [{ name: "totals", sql: "SELECT COUNT(*) FROM sales" }] },
+    });
+    expect(postedMessages).toContainEqual({
+      type: "openTableQuery",
+      payload: {
+        query: { name: "sales", sql: 'SELECT *\nFROM "sales"' },
+      },
     });
 
     await messageHandler!({
@@ -130,7 +155,7 @@ describe("Command — openQueryEditor", () => {
       subscriptions: [] as { dispose: () => void }[],
     };
 
-    openQueryEditor(context as never, registry, harness.engine);
+    openQueryEditor(context as never, registry, harness.engine, { source: "view/title" });
 
     // The message handler should be registered
     expect(messageHandler).toBeDefined();
@@ -149,6 +174,79 @@ describe("Command — openQueryEditor", () => {
     expect(queryResult.tabId).toBe("tab1");
     expect(Number(queryResult.payload.rows[0].cnt)).toBe(5);
     expect(queryResult.payload.truncated).toBe(false);
+  });
+
+  it("reports a configured table as not loaded when its query is run", async () => {
+    harness = await createEngine();
+    const registry = new TableRegistry();
+    registry.add({
+      name: "sales",
+      filePath: path.join(FIXTURES, "sales.csv"),
+      fileType: "csv",
+      isS3: false,
+      loadState: "configured",
+    });
+
+    let messageHandler: ((msg: unknown) => Promise<void>) | undefined;
+    const postedMessages: any[] = [];
+    const mockPanel = {
+      webview: {
+        postMessage: vi.fn((msg: unknown) => {
+          postedMessages.push(msg);
+          return Promise.resolve(true);
+        }),
+        onDidReceiveMessage: vi.fn((handler: (msg: unknown) => Promise<void>) => {
+          messageHandler = handler;
+          return { dispose: vi.fn() };
+        }),
+        asWebviewUri: vi.fn((uri: unknown) => uri),
+        cspSource: "test",
+        html: "",
+      },
+      reveal: vi.fn(),
+      onDidDispose: vi.fn((handler: () => void) => {
+        disposeHandler = handler;
+        return { dispose: vi.fn() };
+      }),
+      dispose: vi.fn(),
+    };
+    (window.createWebviewPanel as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockPanel);
+    const context = {
+      extensionUri: Uri.file("/fake/extension"),
+      subscriptions: [] as { dispose: () => void }[],
+    };
+
+    openQueryEditor(context as never, registry, harness.engine, "sales");
+    await messageHandler!({
+      type: "runQuery",
+      payload: { sql: 'SELECT * FROM "sales"', tabId: "sales-tab" },
+    });
+
+    expect(postedMessages).toContainEqual({
+      type: "queryError",
+      payload: {
+        message:
+          'Table "sales" is not loaded. Load it from File SQL Tables, then run the query again.',
+      },
+      tabId: "sales-tab",
+    });
+
+    registry.add({
+      name: "a",
+      filePath: path.join(FIXTURES, "sales.csv"),
+      fileType: "csv",
+      isS3: false,
+      loadState: "configured",
+    });
+    await messageHandler!({
+      type: "runQuery",
+      payload: { sql: "SELECT * FROM missing", tabId: "missing-tab" },
+    });
+    const missingError = postedMessages.find(
+      (message) => message.type === "queryError" && message.tabId === "missing-tab",
+    );
+    expect(missingError.payload.message).toMatch(/missing.*does not exist/is);
+    expect(missingError.payload.message).not.toContain('Table "a" is not loaded');
   });
 
   it.each([
@@ -312,6 +410,17 @@ describe("Command — openQueryEditor", () => {
     expect(mockPanel.reveal).toHaveBeenCalled();
     // The setWorkspaceQueries above already posts, plus reveal branch posts tables
     expect(postedMessages.some((m: any) => m.type === "savedQueries")).toBe(true);
+    expect(postedMessages.some((m: any) => m.type === "openTableQuery")).toBe(false);
+    expect(postedMessages).toContainEqual({ type: "openNewQuery" });
+
+    postedMessages.length = 0;
+    openQueryEditor(context as never, registry, harness.engine, "sales");
+    expect(postedMessages).toContainEqual({
+      type: "openTableQuery",
+      payload: {
+        query: { name: "sales", sql: 'SELECT *\nFROM "sales"' },
+      },
+    });
   });
 
   it("requestQueryTabsSnapshot returns latest from webview (Fix 3)", async () => {

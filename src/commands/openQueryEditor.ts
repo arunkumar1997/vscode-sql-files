@@ -1,9 +1,10 @@
 import * as vscode from "vscode";
 import * as crypto from "crypto";
-import { DuckDBEngine } from "../duckdbEngine";
+import { DuckDBEngine, escapeDuckDBIdentifier } from "../duckdbEngine";
 import { TableRegistry } from "../tableRegistry";
 import { ExportFormat, SavedQuery, TableEntry } from "../types";
 import { getConfig } from "../s3Handler";
+import { ensureUniqueQueryNames } from "../queryNames";
 
 const VALID_EXPORT_FORMATS = new Set<string>(["csv", "parquet"]);
 
@@ -11,6 +12,7 @@ let panel: vscode.WebviewPanel | undefined;
 /** Track the original SQL per tab for export (keyed by tabId). */
 const tabSqlMap = new Map<string, string>();
 let workspaceQueries: SavedQuery[] = [];
+let pendingTableQuery: SavedQuery | undefined;
 
 /** Pending snapshot requests keyed by request id. */
 const pendingSnapshots = new Map<string, { resolve: (queries: SavedQuery[]) => void; reject: (err: Error) => void }>();
@@ -19,7 +21,7 @@ const pendingSnapshots = new Map<string, { resolve: (queries: SavedQuery[]) => v
 const SNAPSHOT_TIMEOUT_MS = 3000;
 
 export function setWorkspaceQueries(queries: SavedQuery[]): void {
-  workspaceQueries = queries;
+  workspaceQueries = ensureUniqueQueryNames(queries);
   // If panel is already open, push updated queries immediately
   if (panel) {
     panel.webview.postMessage({
@@ -39,6 +41,24 @@ export function hasWorkspaceQueries(): boolean {
 
 export function isQueryEditorOpen(): boolean {
   return panel !== undefined;
+}
+
+export function createTableQuery(tableName: string): SavedQuery {
+  return {
+    name: tableName,
+    sql: `SELECT *\nFROM ${escapeDuckDBIdentifier(tableName)}`,
+  };
+}
+
+function sendTableQuery(query: SavedQuery): void {
+  panel?.webview.postMessage({
+    type: "openTableQuery",
+    payload: { query },
+  });
+}
+
+function sendNewQuery(): void {
+  panel?.webview.postMessage({ type: "openNewQuery" });
 }
 
 /**
@@ -79,7 +99,13 @@ export function openQueryEditor(
   context: vscode.ExtensionContext,
   registry: TableRegistry,
   engine: DuckDBEngine,
+  tableName?: unknown,
 ): void {
+  const requestedTableName =
+    typeof tableName === "string" && tableName.length > 0
+      ? tableName
+      : undefined;
+
   if (registry.getAll().length === 0) {
     vscode.window.showInformationMessage("Please add a file or folder before opening the Query Editor.");
     if (panel) {
@@ -94,8 +120,17 @@ export function openQueryEditor(
       type: "savedQueries",
       payload: { queries: workspaceQueries },
     });
+    if (requestedTableName) {
+      sendTableQuery(createTableQuery(requestedTableName));
+    } else if (tableName !== false) {
+      sendNewQuery();
+    }
     return;
   }
+
+  pendingTableQuery = requestedTableName
+    ? createTableQuery(requestedTableName)
+    : undefined;
 
   panel = vscode.window.createWebviewPanel(
     "fileSqlEditor",
@@ -135,17 +170,23 @@ export function openQueryEditor(
           type: "savedQueries",
           payload: { queries: workspaceQueries },
         });
+        if (pendingTableQuery) {
+          sendTableQuery(pendingTableQuery);
+          pendingTableQuery = undefined;
+        }
         return;
       }
       if (msg.type === "queryTabsChanged") {
         const queries = (msg.payload as { queries?: unknown })?.queries;
         if (Array.isArray(queries)) {
-          workspaceQueries = queries.filter(
-            (query): query is SavedQuery =>
-              typeof query === "object" &&
-              query !== null &&
-              typeof (query as SavedQuery).name === "string" &&
-              typeof (query as SavedQuery).sql === "string",
+          workspaceQueries = ensureUniqueQueryNames(
+            queries.filter(
+              (query): query is SavedQuery =>
+                typeof query === "object" &&
+                query !== null &&
+                typeof (query as SavedQuery).name === "string" &&
+                typeof (query as SavedQuery).sql === "string",
+            ),
           );
         }
         return;
@@ -163,7 +204,7 @@ export function openQueryEditor(
                 typeof (q as SavedQuery).name === "string" &&
                 typeof (q as SavedQuery).sql === "string",
             );
-            pending.resolve(valid);
+            pending.resolve(ensureUniqueQueryNames(valid));
           } else {
             pending.resolve(workspaceQueries);
           }
@@ -171,7 +212,7 @@ export function openQueryEditor(
         return;
       }
       if (msg.type === "runQuery") {
-        await handleRunQuery(msg.payload, engine);
+        await handleRunQuery(msg.payload, engine, registry);
         return;
       }
       if (msg.type === "exportResults") {
@@ -189,12 +230,17 @@ export function openQueryEditor(
     }
     pendingSnapshots.clear();
     panel = undefined;
+    pendingTableQuery = undefined;
     tabSqlMap.clear();
     tablesSub.dispose();
   });
 }
 
-async function handleRunQuery(payload: unknown, engine: DuckDBEngine): Promise<void> {
+async function handleRunQuery(
+  payload: unknown,
+  engine: DuckDBEngine,
+  registry: TableRegistry,
+): Promise<void> {
   const query = payload as { sql?: unknown; tabId?: unknown } | null | undefined;
   if (!query || typeof query.sql !== "string" || typeof query.tabId !== "string") {
     panel?.webview.postMessage({
@@ -212,12 +258,37 @@ async function handleRunQuery(payload: unknown, engine: DuckDBEngine): Promise<v
     const result = await engine.executeQuery(sql, maxRows);
     panel?.webview.postMessage({ type: "queryResult", payload: result, tabId });
   } catch (err: unknown) {
+    const message = formatQueryError(err, registry);
     panel?.webview.postMessage({
       type: "queryError",
-      payload: { message: (err as Error).message },
+      payload: { message },
       tabId,
     });
   }
+}
+
+function formatQueryError(error: unknown, registry: TableRegistry): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const missingRelation = message.match(
+    /table with name\s+["'`]?(.+?)["'`]?\s+does not exist/i,
+  )?.[1];
+  if (!missingRelation) {
+    return message;
+  }
+
+  const normalizedRelation = missingRelation.toLocaleLowerCase();
+  const unloadedTable = registry
+    .getAll()
+    .find(
+      (entry) =>
+        (entry.loadState === "configured" || entry.loadState === "error") &&
+        entry.name.toLocaleLowerCase() === normalizedRelation,
+    );
+  if (!unloadedTable) {
+    return message;
+  }
+
+  return `Table "${unloadedTable.name}" is not loaded. Load it from File SQL Tables, then run the query again.`;
 }
 
 async function handleExportResults(payload: unknown, engine: DuckDBEngine): Promise<void> {

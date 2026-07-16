@@ -136,7 +136,7 @@ Open the **File SQL** sidebar (database icon in the Activity Bar), then:
 - Click **Import Workspace Configuration** to restore table definitions lazily and reopen saved query tabs
 - Click **Load** on each table when you want DuckDB to materialize it
 
-Saved queries are normal SQL files under `.filesql/queries/`. The `.filesql/` directory is ignored by Git by default so workspace configuration and queries remain local.
+Saved queries are normal SQL files under `.filesql/queries/`, so they can be reviewed and shared with the rest of the workspace configuration.
 
 ### 3. Query
 
