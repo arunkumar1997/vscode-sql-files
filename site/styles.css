@@ -1598,7 +1598,7 @@ pre {
   cursor: default;
   pointer-events: none;
 }
-.tb-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-hint { flex: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb-meta {
   display: inline-flex;
   gap: 12px;
