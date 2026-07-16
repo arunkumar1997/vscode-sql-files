@@ -5,12 +5,47 @@ import { TableRegistry } from "../tableRegistry";
 type TreeNode = TableNode | ColumnNode;
 
 class TableNode extends vscode.TreeItem {
-  readonly contextValue = "table";
+  readonly contextValue: string;
   constructor(public readonly entry: TableEntry) {
-    super(entry.name, vscode.TreeItemCollapsibleState.Collapsed);
-    this.tooltip = entry.sourceUri ?? entry.filePath;
-    this.iconPath = new vscode.ThemeIcon(entry.isS3 ? "cloud" : "database");
-    this.description = entry.isS3 ? "s3" : entry.fileType;
+    const isExpandable =
+      entry.loadState === "loaded" || entry.loadState === undefined;
+    super(
+      entry.name,
+      isExpandable
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None,
+    );
+    this.tooltip = entry.loadError ?? entry.sourceUri ?? entry.filePath;
+    // State-dependent rendering
+    switch (entry.loadState) {
+      case "configured":
+        this.iconPath = new vscode.ThemeIcon(
+          entry.isS3 ? "cloud" : "database",
+          new vscode.ThemeColor("disabledForeground"),
+        );
+        this.description = "Not loaded";
+        this.contextValue = "table.configured";
+        break;
+      case "loading":
+        this.iconPath = new vscode.ThemeIcon("sync~spin");
+        this.description = "Loading…";
+        this.contextValue = "table.loading";
+        break;
+      case "error":
+        this.iconPath = new vscode.ThemeIcon(
+          "error",
+          new vscode.ThemeColor("errorForeground"),
+        );
+        this.description = "Error";
+        this.contextValue = "table.error";
+        break;
+      default:
+        // loaded or undefined (backward compat)
+        this.iconPath = new vscode.ThemeIcon(entry.isS3 ? "cloud" : "database");
+        this.description = entry.isS3 ? "s3" : entry.fileType;
+        this.contextValue = "table";
+        break;
+    }
   }
 }
 

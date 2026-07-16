@@ -2,12 +2,12 @@ import * as vscode from "vscode";
 import { TableRegistry } from "../tableRegistry";
 
 export class SqlCompletionProvider implements vscode.CompletionItemProvider {
-  constructor(private readonly registry: TableRegistry) {}
+  constructor(private readonly registry: TableRegistry) { }
 
   provideCompletionItems(): vscode.CompletionItem[] {
     const items: vscode.CompletionItem[] = [];
 
-    for (const entry of this.registry.getAll()) {
+    for (const entry of this.registry.getLoaded()) {
       const tableItem = new vscode.CompletionItem(
         entry.name,
         vscode.CompletionItemKind.Class,

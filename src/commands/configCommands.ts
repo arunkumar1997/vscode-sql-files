@@ -3,8 +3,8 @@ import * as fs from "fs";
 import * as vscode from "vscode";
 import { DuckDBEngine } from "../duckdbEngine";
 import { TableRegistry } from "../tableRegistry";
-import { TableEntry } from "../types";
-import { toConfigEntry, writeConfig } from "../configManager";
+import { SavedQuery, TableEntry } from "../types";
+import { readConfig, toConfigEntry, writeConfig, writeSavedQueries } from "../configManager";
 import {
     cleanupPerLoadTempDir,
     createPerLoadTempDir,
@@ -428,73 +428,38 @@ async function loadS3SingleFile(
     log(`Table "${entry.name}" loaded from S3 single file`);
 }
 
-// --- Load All Tables ---
+// --- Import Workspace Configuration ---
 
-/**
- * Load all configured/error tables.
- * Continues after failures. Uses progress + cancellation.
- */
-export async function loadAllTables(
+export async function importWorkspaceConfig(
     registry: TableRegistry,
-    engine: DuckDBEngine,
-    workspaceRoot: string,
-): Promise<void> {
-    const loadable = registry.getAll().filter(
-        (e) => e.loadState === "configured" || e.loadState === "error",
-    );
-
-    if (loadable.length === 0) {
-        vscode.window.showInformationMessage("File SQL: No tables to load.");
-        return;
+    workspaceRoot: vscode.Uri,
+): Promise<boolean> {
+    const { entries, diagnostics, missing } = await readConfig(workspaceRoot);
+    if (diagnostics.length > 0) {
+        vscode.window.showErrorMessage(
+            `File SQL: Cannot import workspace configuration — ${diagnostics[0].message}`,
+        );
+        return false;
+    }
+    if (missing) {
+        vscode.window.showInformationMessage(
+            "File SQL: No .filesql/config.json workspace configuration found.",
+        );
+        return false;
     }
 
-    await vscode.window.withProgress(
-        {
-            location: vscode.ProgressLocation.Notification,
-            title: "File SQL: Loading tables…",
-            cancellable: true,
-        },
-        async (progress, token) => {
-            let loaded = 0;
-            let failed = 0;
-
-            for (const entry of loadable) {
-                if (token?.isCancellationRequested) {
-                    vscode.window.showInformationMessage(
-                        `File SQL: Cancelled. Loaded ${loaded}/${loadable.length} table(s).`,
-                    );
-                    return;
-                }
-                progress.report({
-                    message: `${entry.name} (${loaded + failed + 1}/${loadable.length})`,
-                    increment: 100 / loadable.length,
-                });
-                const ok = await loadTable(
-                    entry.name,
-                    registry,
-                    engine,
-                    workspaceRoot,
-                    progress,
-                    token,
-                );
-                if (ok) {
-                    loaded++;
-                } else {
-                    failed++;
-                }
-            }
-
-            if (failed > 0) {
-                vscode.window.showWarningMessage(
-                    `File SQL: Loaded ${loaded}/${loadable.length} table(s). ${failed} failed.`,
-                );
-            } else {
-                vscode.window.showInformationMessage(
-                    `File SQL: Loaded ${loaded} table(s).`,
-                );
-            }
-        },
+    // Item 4: Use reconcileConfig for proper add/update/remove semantics
+    const report = registry.reconcileConfig(entries);
+    const parts: string[] = [];
+    if (report.added.length > 0) parts.push(`${report.added.length} added`);
+    if (report.updated.length > 0) parts.push(`${report.updated.length} updated`);
+    if (report.removed.length > 0) parts.push(`${report.removed.length} removed`);
+    if (report.skipped.length > 0) parts.push(`${report.skipped.length} skipped (loaded/ad-hoc)`);
+    const summary = parts.length > 0 ? parts.join(", ") : "no changes";
+    vscode.window.showInformationMessage(
+        `File SQL: Import complete — ${summary}.`,
     );
+    return true;
 }
 
 // --- Unload Table ---
@@ -653,6 +618,7 @@ export async function reloadTable(
 export async function saveWorkspaceConfig(
     registry: TableRegistry,
     workspaceRoot: vscode.Uri,
+    queries?: SavedQuery[],
 ): Promise<boolean> {
     const allEntries = registry.getAll();
     const workspaceRootPath = workspaceRoot.fsPath;
@@ -660,9 +626,13 @@ export async function saveWorkspaceConfig(
     // If registry is empty, write empty config (valid explicit save)
     if (allEntries.length === 0) {
         try {
+            // Write queries first so config.json is never ahead of query files
+            if (queries) {
+                await writeSavedQueries(workspaceRoot, queries);
+            }
             await writeConfig(workspaceRoot, []);
             vscode.window.showInformationMessage(
-                "File SQL: Workspace configuration saved to .filesql/config.json (0 tables).",
+                `File SQL: Workspace configuration saved to .filesql/config.json (0 tables, ${queries?.length ?? 0} queries).`,
             );
             log("Saved workspace config: 0 table(s)");
             return true;
@@ -700,9 +670,13 @@ export async function saveWorkspaceConfig(
     }
 
     try {
+        // Write queries BEFORE config.json — if queries fail, config is untouched
+        if (queries) {
+            await writeSavedQueries(workspaceRoot, queries);
+        }
         await writeConfig(workspaceRoot, configEntries);
         vscode.window.showInformationMessage(
-            `File SQL: Workspace configuration saved to .filesql/config.json (${configEntries.length} table(s)).`,
+            `File SQL: Workspace configuration saved to .filesql/config.json (${configEntries.length} table(s), ${queries?.length ?? 0} queries).`,
         );
         log(`Saved workspace config: ${configEntries.length} table(s)`);
         return true;

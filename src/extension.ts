@@ -6,7 +6,12 @@ import { TablesTreeProvider } from "./providers/tablesTreeProvider";
 import { addPath } from "./commands/addPath";
 import { addFolder } from "./commands/addFolder";
 import { entryFromLocalFile } from "./fileScanner";
-import { openQueryEditor } from "./commands/openQueryEditor";
+import {
+  hasWorkspaceQueries,
+  openQueryEditor,
+  requestQueryTabsSnapshot,
+  setWorkspaceQueries,
+} from "./commands/openQueryEditor";
 import { clearTables, removeTable, renameTable } from "./commands/clearTables";
 import { SqlCompletionProvider } from "./providers/completionProvider";
 import { cleanupTempDir } from "./s3Handler";
@@ -14,11 +19,12 @@ import { TableEntry } from "./types";
 import { initLogger, log } from "./logger";
 import {
   loadTable,
-  loadAllTables,
+  importWorkspaceConfig,
   unloadTable,
   reloadTable,
   saveWorkspaceConfig,
 } from "./commands/configCommands";
+import { readConfig, readSavedQueries } from "./configManager";
 
 /** Exposed only when running inside the VS Code test host. */
 export interface TestApi {
@@ -44,6 +50,30 @@ export async function activate(
   log(`Restored ${savedEntries.length} persisted table(s)`);
   if (savedEntries.length > 0) {
     restoreEntries(savedEntries, registry, engine);
+  }
+
+  // Slice 7: Read .filesql/config.json and register configured (unloaded) entries
+  const wsFolder = vscode.workspace.workspaceFolders?.[0];
+  if (wsFolder) {
+    try {
+      const { entries, diagnostics, missing } = await readConfig(wsFolder.uri);
+      if (!missing && entries.length > 0) {
+        registry.addConfigured(entries);
+        log(`Registered ${entries.length} configured table(s) from .filesql/config.json`);
+      }
+      for (const d of diagnostics) {
+        log(`[config] ${d.message}`);
+      }
+    } catch (err) {
+      log(`[config] Error reading workspace config: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
+      const queries = await readSavedQueries(wsFolder.uri);
+      setWorkspaceQueries(queries);
+      log(`Restored ${queries.length} saved quer${queries.length === 1 ? "y" : "ies"}`);
+    } catch (err) {
+      log(`[config] Error reading saved queries: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const treeProvider = new TablesTreeProvider(registry);
@@ -126,13 +156,26 @@ export async function activate(
       },
     ),
 
-    vscode.commands.registerCommand("fileSql.loadAllTables", () => {
-      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (!wsRoot) {
+    vscode.commands.registerCommand("fileSql.importWorkspaceConfig", async () => {
+      const wsFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!wsFolder) {
         vscode.window.showErrorMessage("File SQL: No workspace folder open.");
         return;
       }
-      return loadAllTables(registry!, engine!, wsRoot);
+      const imported = await importWorkspaceConfig(registry!, wsFolder.uri);
+      if (imported) {
+        // Item 5: Always reread queries from disk on import
+        try {
+          const queries = await readSavedQueries(wsFolder.uri);
+          setWorkspaceQueries(queries);
+          log(`Re-read ${queries.length} saved quer${queries.length === 1 ? "y" : "ies"} from disk`);
+        } catch (err) {
+          log(`[config] Error re-reading saved queries: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        if (hasWorkspaceQueries() && registry!.getAll().length > 0) {
+          openQueryEditor(context, registry!, engine!);
+        }
+      }
     }),
 
     vscode.commands.registerCommand(
@@ -158,13 +201,23 @@ export async function activate(
       },
     ),
 
-    vscode.commands.registerCommand("fileSql.saveWorkspaceConfig", () => {
+    vscode.commands.registerCommand("fileSql.saveWorkspaceConfig", async () => {
       const wsFolder = vscode.workspace.workspaceFolders?.[0];
       if (!wsFolder) {
         vscode.window.showErrorMessage("File SQL: No workspace folder open.");
         return;
       }
-      return saveWorkspaceConfig(registry!, wsFolder.uri);
+      // Request current tab snapshot from webview (or use host state if no panel)
+      let queries: import("./types").SavedQuery[];
+      try {
+        queries = await requestQueryTabsSnapshot();
+      } catch (err) {
+        vscode.window.showErrorMessage(
+          `File SQL: Failed to get current query state — ${(err as Error).message}`,
+        );
+        return;
+      }
+      return saveWorkspaceConfig(registry!, wsFolder.uri, queries);
     }),
 
     vscode.languages.registerCompletionItemProvider(

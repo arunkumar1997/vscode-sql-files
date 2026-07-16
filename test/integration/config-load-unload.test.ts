@@ -26,6 +26,7 @@ vi.mock("../../src/logger", () => ({
     logWarn: vi.fn(),
 }));
 vi.mock("../../src/configManager", () => ({
+    readConfig: vi.fn(),
     writeConfig: vi.fn().mockResolvedValue(undefined),
     toConfigEntry: vi.fn((entry: TableEntry, wsRoot: string) => {
         const posixRoot = wsRoot.replace(/\\/g, "/");
@@ -36,9 +37,9 @@ vi.mock("../../src/configManager", () => ({
     }),
 }));
 
-import { loadTable, unloadTable, reloadTable, loadAllTables, saveWorkspaceConfig } from "../../src/commands/configCommands";
+import { importWorkspaceConfig, loadTable, unloadTable, reloadTable, saveWorkspaceConfig } from "../../src/commands/configCommands";
 import * as vscode from "vscode";
-import { writeConfig } from "../../src/configManager";
+import { readConfig, writeConfig } from "../../src/configManager";
 
 describe("Integration — config load/unload cycle with real DuckDB", () => {
     let harness: EngineHarness;
@@ -106,7 +107,7 @@ describe("Integration — config load/unload cycle with real DuckDB", () => {
         expect(Number(result.rows[0].cnt)).toBe(5);
     });
 
-    it("loadAll loads multiple configured tables, continues after failure", async () => {
+    it("loads multiple configured tables individually, continues after failure", async () => {
         const wsRoot = path.resolve(__dirname, "../..");
         registry.addConfigured([
             { name: "sales_la", source: "./test/fixtures/sales.csv", fileType: "csv" },
@@ -114,11 +115,41 @@ describe("Integration — config load/unload cycle with real DuckDB", () => {
             { name: "events_la", source: "./test/fixtures/events.jsonl", fileType: "json" },
         ]);
 
-        await loadAllTables(registry, harness.engine, wsRoot);
+        await loadTable("sales_la", registry, harness.engine, wsRoot);
+        await loadTable("bad_la", registry, harness.engine, wsRoot);
+        await loadTable("events_la", registry, harness.engine, wsRoot);
 
         expect(registry.get("sales_la")!.loadState).toBe("loaded");
         expect(registry.get("bad_la")!.loadState).toBe("error");
         expect(registry.get("events_la")!.loadState).toBe("loaded");
+    });
+
+    it("import restores a runtime-deleted table without loading it", async () => {
+        const wsRoot = path.resolve(__dirname, "../..");
+        const wsUri = { fsPath: wsRoot } as vscode.Uri;
+        const { DuckDBEngine } = await import("../../src/duckdbEngine");
+        const freshEngine = new DuckDBEngine();
+        vi.mocked(readConfig).mockResolvedValue({
+            entries: [
+                { name: "restored", source: "./test/fixtures/sales.csv", fileType: "csv" },
+            ],
+            diagnostics: [],
+            missing: false,
+        });
+
+        registry.addConfigured([
+            { name: "restored", source: "./test/fixtures/sales.csv", fileType: "csv" },
+        ]);
+        registry.remove("restored");
+
+        const imported = await importWorkspaceConfig(registry, wsUri);
+
+        expect(imported).toBe(true);
+        expect(readConfig).toHaveBeenCalledWith(wsUri);
+        expect(registry.get("restored")?.loadState).toBe("configured");
+        expect(registry.get("restored")?.columns).toBeUndefined();
+        expect(freshEngine.isReady()).toBe(false);
+        freshEngine.dispose();
     });
 
     it("blocks duplicate load of same table", async () => {

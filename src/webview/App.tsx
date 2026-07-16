@@ -3,7 +3,7 @@ import "./styles.css";
 import { QueryEditor } from "./components/QueryEditor";
 import { ResultsTable } from "./components/ResultsTable";
 import { Toolbar } from "./components/Toolbar";
-import { ExportFormat, QueryResult, TableEntry } from "../types";
+import { ExportFormat, QueryResult, SavedQuery, TableEntry } from "../types";
 import { isSuccessStatus, formatExportStatus } from "./exportHelpers";
 
 declare const acquireVsCodeApi: () => {
@@ -40,14 +40,42 @@ function createTab(): TabState {
   };
 }
 
+function createSavedTab(query: SavedQuery): TabState {
+  const tab = createTab();
+  return { ...tab, label: query.name, sql: query.sql };
+}
+
+/**
+ * Returns true if the tab set is still the untouched initial default
+ * (one tab matching the initial tab with no edits).
+ */
+export function isUntouchedInitialTabs(
+  tabs: TabState[],
+  initial: TabState,
+): boolean {
+  return (
+    tabs.length === 1 &&
+    tabs[0].id === initial.id &&
+    tabs[0].sql === initial.sql &&
+    tabs[0].label === initial.label
+  );
+}
+
 export function App(): JSX.Element {
   const [tables, setTables] = useState<TableEntry[]>([]);
   const initialTab = useRef(createTab());
   const [tabs, setTabs] = useState<TabState[]>([initialTab.current]);
   const [activeTabId, setActiveTabId] = useState<string>(initialTab.current.id);
+  const tabsRef = useRef<TabState[]>(tabs);
+  // Keep tabsRef in sync with latest tabs state for immediate snapshot reads
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
   const [editorHeight, setEditorHeight] = useState(220);
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
+  const [queriesHydrated, setQueriesHydrated] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const pendingFocusTabRef = useRef<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Each mounted QueryEditor registers its run function here keyed by tab id
@@ -58,6 +86,17 @@ export function App(): JSX.Element {
   const dragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(0);
+
+  // After a keyboard-driven close, move focus to the newly active tab
+  useEffect(() => {
+    if (pendingFocusTabRef.current) {
+      const id = pendingFocusTabRef.current;
+      pendingFocusTabRef.current = null;
+      requestAnimationFrame(() => {
+        document.getElementById(`tab-${id}`)?.focus();
+      });
+    }
+  }, [tabs]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
@@ -72,6 +111,32 @@ export function App(): JSX.Element {
         case "tablesChanged":
           setTables((msg.payload as { tables: TableEntry[] }).tables);
           break;
+        case "savedQueries": {
+          const queries = (msg.payload as { queries: SavedQuery[] }).queries;
+          if (queries.length > 0) {
+            // Item 3: If user edited initial tab, preserve edit and append restored tabs
+            const restoredTabs = queries.map(createSavedTab);
+            setTabs((prev) => {
+              if (isUntouchedInitialTabs(prev, initialTab.current)) {
+                // Replace untouched default with restored tabs
+                setActiveTabId(restoredTabs[0].id);
+                return restoredTabs;
+              }
+              // Idempotent: skip queries already open (same name+sql)
+              const existingSet = new Set(
+                prev.map((t) => `${t.label}\0${t.sql}`),
+              );
+              const novel = restoredTabs.filter(
+                (t) => !existingSet.has(`${t.label}\0${t.sql}`),
+              );
+              if (novel.length === 0) return prev;
+              setActiveTabId(prev[0].id);
+              return [...prev, ...novel];
+            });
+          }
+          setQueriesHydrated(true);
+          break;
+        }
         case "queryResult":
           setTabs((prev) =>
             prev.map((t) =>
@@ -131,12 +196,47 @@ export function App(): JSX.Element {
             ),
           );
           break;
+        case "requestQueryTabs": {
+          // Respond immediately with current React state (not debounced)
+          const reqPayload = msg.payload as { requestId?: string } | undefined;
+          const requestId = reqPayload?.requestId;
+          if (typeof requestId === "string") {
+            // Read current state via ref for immediate snapshot
+            vscode.postMessage({
+              type: "queryTabsSnapshot",
+              payload: {
+                requestId,
+                queries: tabsRef.current.map(({ label, sql }) => ({
+                  name: label,
+                  sql,
+                })),
+              },
+            });
+          }
+          break;
+        }
       }
     }
     window.addEventListener("message", onMessage);
     vscode.postMessage({ type: "ready" });
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  useEffect(() => {
+    if (!queriesHydrated) return;
+    // Item 2: Do not persist the untouched initial default tab
+    if (isUntouchedInitialTabs(tabs, initialTab.current)) return;
+
+    const timer = setTimeout(() => {
+      vscode.postMessage({
+        type: "queryTabsChanged",
+        payload: {
+          queries: tabs.map(({ label, sql }) => ({ name: label, sql })),
+        },
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [queriesHydrated, tabs]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -252,6 +352,25 @@ export function App(): JSX.Element {
     });
   }
 
+  function closeTabByKeyboard(id: string): void {
+    setTabs((prev) => {
+      if (prev.length === 1) return prev;
+      const idx = prev.findIndex((t) => t.id === id);
+      const next = prev.filter((t) => t.id !== id);
+      if (activeTabId === id) {
+        // Prefer the tab to the right (same index), else last
+        const newActive = next[Math.min(idx, next.length - 1)];
+        setActiveTabId(newActive.id);
+        pendingFocusTabRef.current = newActive.id;
+      } else {
+        // Focus stays on the currently active tab
+        pendingFocusTabRef.current = activeTabId;
+      }
+      runRefs.current.delete(id);
+      return next;
+    });
+  }
+
   /** Get or create a stable runRef for a given tab */
   function getRunRef(tabId: string): React.MutableRefObject<() => void> {
     if (!runRefs.current.has(tabId)) {
@@ -263,12 +382,47 @@ export function App(): JSX.Element {
   return (
     <div className="app-layout">
       {/* ── Tab bar ── */}
-      <div className="tab-bar">
-        {tabs.map((tab) => (
+      <div className="tab-bar" role="tablist" aria-label="Query tabs">
+        {tabs.map((tab, idx) => (
           <div
             key={tab.id}
+            id={`tab-${tab.id}`}
             className={`tab${tab.id === activeTabId ? " tab--active" : ""}${tab.running ? " tab--running" : ""}`}
+            role="tab"
+            aria-selected={tab.id === activeTabId}
+            aria-controls={`tabpanel-${tab.id}`}
+            tabIndex={tab.id === activeTabId ? 0 : -1}
             onClick={() => setActiveTabId(tab.id)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight") {
+                e.preventDefault();
+                const nextIdx = idx < tabs.length - 1 ? idx + 1 : 0;
+                const next = tabs[nextIdx];
+                setActiveTabId(next.id);
+                const nextEl = document.getElementById(`tab-${next.id}`);
+                nextEl?.focus();
+              } else if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                const prevIdx = idx > 0 ? idx - 1 : tabs.length - 1;
+                const prev = tabs[prevIdx];
+                setActiveTabId(prev.id);
+                const prevEl = document.getElementById(`tab-${prev.id}`);
+                prevEl?.focus();
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                const first = tabs[0];
+                setActiveTabId(first.id);
+                document.getElementById(`tab-${first.id}`)?.focus();
+              } else if (e.key === "End") {
+                e.preventDefault();
+                const last = tabs[tabs.length - 1];
+                setActiveTabId(last.id);
+                document.getElementById(`tab-${last.id}`)?.focus();
+              } else if (e.key === "Delete") {
+                e.preventDefault();
+                closeTabByKeyboard(tab.id);
+              }
+            }}
             title={tab.label}
           >
             {renamingTabId === tab.id ? (
@@ -290,19 +444,26 @@ export function App(): JSX.Element {
                 {tab.label}
               </span>
             )}
-            <span
+            <button
               className="tab-close"
+              tabIndex={-1}
               onClick={(e) => closeTab(tab.id, e)}
-              title="Close tab"
+              aria-label={`Close ${tab.label}`}
+              title="Close tab (Delete)"
             >
               ×
-            </span>
+            </button>
           </div>
         ))}
-        <button className="tab-add" onClick={addTab} title="New query tab">
-          +
-        </button>
       </div>
+      <button
+        className="tab-add"
+        onClick={addTab}
+        aria-label="New query tab"
+        title="New query tab"
+      >
+        +
+      </button>
 
       {/* ── Toolbar (run button + row count + export) ── */}
       <Toolbar
@@ -320,6 +481,9 @@ export function App(): JSX.Element {
         {tabs.map((tab) => (
           <div
             key={tab.id}
+            id={`tabpanel-${tab.id}`}
+            role="tabpanel"
+            aria-labelledby={`tab-${tab.id}`}
             style={{
               display: tab.id === activeTabId ? "block" : "none",
               height: "100%",
@@ -341,7 +505,12 @@ export function App(): JSX.Element {
       </div>
 
       <div className="results-panel">
-        {activeTab.error ? (
+        {tables.length === 0 ? (
+          <div className="empty-table-hint">
+            No tables loaded yet. Use the sidebar to <strong>Load</strong> a
+            table, then run a query.
+          </div>
+        ) : activeTab.error ? (
           <div className="error-banner">{activeTab.error}</div>
         ) : isSuccessStatus(activeTab.result) ? (
           <div className="success-banner">Statement executed successfully.</div>

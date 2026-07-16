@@ -82,9 +82,9 @@
         "icon": "$(cloud-download)"
       },
       {
-        "command": "fileSql.loadAllTables",
-        "title": "File SQL: Load All Tables",
-        "icon": "$(cloud-download)"
+        "command": "fileSql.importWorkspaceConfig",
+        "title": "File SQL: Import Workspace Configuration",
+        "icon": "$(desktop-download)"
       },
       {
         "command": "fileSql.unloadTable",
@@ -138,6 +138,16 @@
           "group": "navigation"
         },
         {
+          "command": "fileSql.importWorkspaceConfig",
+          "when": "view == fileSqlTables",
+          "group": "navigation"
+        },
+        {
+          "command": "fileSql.saveWorkspaceConfig",
+          "when": "view == fileSqlTables",
+          "group": "navigation"
+        },
+        {
           "command": "fileSql.clearTables",
           "when": "view == fileSqlTables",
           "group": "navigation"
@@ -152,13 +162,43 @@
       ],
       "view/item/context": [
         {
+          "command": "fileSql.loadTable",
+          "when": "view == fileSqlTables && (viewItem == table.configured || viewItem == table.error)",
+          "group": "inline"
+        },
+        {
+          "command": "fileSql.reloadTable",
+          "when": "view == fileSqlTables && viewItem == table",
+          "group": "1_actions@1"
+        },
+        {
           "command": "fileSql.removeTable",
           "when": "view == fileSqlTables && viewItem == table",
           "group": "inline"
         },
         {
+          "command": "fileSql.removeTable",
+          "when": "view == fileSqlTables && viewItem == table.configured",
+          "group": "inline"
+        },
+        {
+          "command": "fileSql.removeTable",
+          "when": "view == fileSqlTables && viewItem == table.error",
+          "group": "inline"
+        },
+        {
           "command": "fileSql.copyTableName",
           "when": "view == fileSqlTables && viewItem == table",
+          "group": "0_copy@1"
+        },
+        {
+          "command": "fileSql.copyTableName",
+          "when": "view == fileSqlTables && viewItem == table.configured",
+          "group": "0_copy@1"
+        },
+        {
+          "command": "fileSql.copyTableName",
+          "when": "view == fileSqlTables && viewItem == table.error",
           "group": "0_copy@1"
         },
         {

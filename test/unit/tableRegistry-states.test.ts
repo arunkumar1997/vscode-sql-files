@@ -377,4 +377,70 @@ describe("TableRegistry — load states", () => {
             expect(entry.source).toBe("./original.csv");
         });
     });
+
+    describe("reconcileConfig", () => {
+        it("adds new entries", () => {
+            const result = registry.reconcileConfig([
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ]);
+            expect(result.added).toContain("a");
+            expect(registry.get("a")!.loadState).toBe("configured");
+        });
+
+        it("updates changed config entry in configured state", () => {
+            registry.addConfigured([
+                { name: "a", source: "./old.csv", fileType: "csv" },
+            ]);
+            const result = registry.reconcileConfig([
+                { name: "a", source: "./new.csv", fileType: "csv" },
+            ]);
+            expect(result.updated).toContain("a");
+            expect(registry.get("a")!.filePath).toBe("./new.csv");
+        });
+
+        it("removes config entry no longer in new config (configured state)", () => {
+            registry.addConfigured([
+                { name: "a", source: "./a.csv", fileType: "csv" },
+                { name: "b", source: "./b.csv", fileType: "csv" },
+            ]);
+            const result = registry.reconcileConfig([
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ]);
+            expect(result.removed).toContain("b");
+            expect(registry.get("b")).toBeUndefined();
+        });
+
+        it("preserves loaded table (does not remove or update)", () => {
+            registry.addConfigured([
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ]);
+            registry.setLoadState("a", "loaded");
+
+            const result = registry.reconcileConfig([]);
+            expect(result.skipped).toContain("a");
+            expect(registry.get("a")).toBeDefined();
+            expect(registry.get("a")!.loadState).toBe("loaded");
+        });
+
+        it("preserves ad-hoc entries with same name", () => {
+            registry.add(makeEntry("a"));
+            const result = registry.reconcileConfig([
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ]);
+            expect(result.skipped).toContain("a");
+            expect(registry.get("a")!.origin).toBe("adhoc");
+        });
+
+        it("idempotent re-import does not duplicate", () => {
+            registry.reconcileConfig([
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ]);
+            const result = registry.reconcileConfig([
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ]);
+            expect(result.added).toHaveLength(0);
+            expect(result.updated).toHaveLength(0);
+            expect(registry.getAll().filter(e => e.name === "a")).toHaveLength(1);
+        });
+    });
 });

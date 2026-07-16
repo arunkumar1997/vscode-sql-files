@@ -29,7 +29,9 @@ vi.mock("../../src/s3Handler", () => ({
 
 // Mock configManager writeConfig and toConfigEntry
 vi.mock("../../src/configManager", () => ({
+    readConfig: vi.fn().mockResolvedValue({ entries: [], diagnostics: [], missing: false }),
     writeConfig: vi.fn().mockResolvedValue(undefined),
+    writeSavedQueries: vi.fn().mockResolvedValue(undefined),
     toConfigEntry: vi.fn((entry: TableEntry, _root: string) => {
         if (entry.isS3 && !entry.source?.startsWith("s3://")) return null;
         return { name: entry.name, source: entry.source ?? entry.filePath, fileType: entry.fileType };
@@ -51,13 +53,13 @@ vi.mock("../../src/logger", () => ({
 
 import {
     loadTable,
-    loadAllTables,
     unloadTable,
     reloadTable,
     saveWorkspaceConfig,
+    importWorkspaceConfig,
 } from "../../src/commands/configCommands";
 import * as vscode from "vscode";
-import { writeConfig, toConfigEntry } from "../../src/configManager";
+import { readConfig, writeConfig, writeSavedQueries, toConfigEntry } from "../../src/configManager";
 
 // Minimal DuckDBEngine mock
 function mockEngine(ready = true) {
@@ -328,78 +330,6 @@ describe("configCommands — reloadTable", () => {
     });
 });
 
-describe("configCommands — loadAllTables", () => {
-    let registry: TableRegistry;
-    let engine: ReturnType<typeof mockEngine>;
-
-    beforeEach(() => {
-        registry = new TableRegistry();
-        engine = mockEngine();
-        vi.clearAllMocks();
-    });
-
-    it("loads all configured tables", async () => {
-        registry.addConfigured([
-            { name: "a", source: "./a.csv", fileType: "csv" },
-            { name: "b", source: "./b.csv", fileType: "csv" },
-        ]);
-
-        await loadAllTables(registry, engine, "/workspace");
-
-        expect(registry.get("a")!.loadState).toBe("loaded");
-        expect(registry.get("b")!.loadState).toBe("loaded");
-        expect(engine.registerTable).toHaveBeenCalledTimes(2);
-    });
-
-    it("continues after individual failures", async () => {
-        registry.addConfigured([
-            { name: "a", source: "./a.csv", fileType: "csv" },
-            { name: "b", source: "./b.csv", fileType: "csv" },
-        ]);
-        (engine.registerTable as ReturnType<typeof vi.fn>)
-            .mockRejectedValueOnce(new Error("fail a"))
-            .mockResolvedValueOnce([{ name: "col", type: "INT" }]);
-
-        await loadAllTables(registry, engine, "/workspace");
-
-        expect(registry.get("a")!.loadState).toBe("error");
-        expect(registry.get("b")!.loadState).toBe("loaded");
-    });
-
-    it("skips already-loaded tables", async () => {
-        registry.addConfigured([
-            { name: "a", source: "./a.csv", fileType: "csv" },
-            { name: "b", source: "./b.csv", fileType: "csv" },
-        ]);
-        registry.setLoadState("a", "loaded");
-
-        await loadAllTables(registry, engine, "/workspace");
-
-        // Only b should be loaded
-        expect(engine.registerTable).toHaveBeenCalledTimes(1);
-        const call = (engine.registerTable as ReturnType<typeof vi.fn>).mock.calls[0][0];
-        expect(call.name).toBe("b");
-    });
-
-    it("shows info message when no tables to load", async () => {
-        await loadAllTables(registry, engine, "/workspace");
-        expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-            "File SQL: No tables to load.",
-        );
-    });
-
-    it("loads error-state tables (retry all)", async () => {
-        registry.addConfigured([
-            { name: "x", source: "./x.csv", fileType: "csv" },
-        ]);
-        registry.setLoadState("x", "error", "old error");
-
-        await loadAllTables(registry, engine, "/workspace");
-
-        expect(registry.get("x")!.loadState).toBe("loaded");
-    });
-});
-
 describe("configCommands — saveWorkspaceConfig", () => {
     let registry: TableRegistry;
 
@@ -426,6 +356,26 @@ describe("configCommands — saveWorkspaceConfig", () => {
         expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
             expect.stringContaining("saved to .filesql/config.json"),
         );
+    });
+
+    it("saves current query tabs with the workspace configuration", async () => {
+        registry.add({
+            name: "sales",
+            filePath: "/workspace/data/sales.csv",
+            fileType: "csv",
+            isS3: false,
+            source: "./data/sales.csv",
+        });
+        const queries = [
+            { name: "totals", sql: "SELECT COUNT(*) FROM sales" },
+        ];
+        const wsRoot = { scheme: "file", fsPath: "/workspace", path: "/workspace", toString: () => "file:///workspace" } as unknown as vscode.Uri;
+
+        const result = await saveWorkspaceConfig(registry, wsRoot, queries);
+
+        expect(result).toBe(true);
+        expect(writeConfig).toHaveBeenCalledTimes(1);
+        expect(writeSavedQueries).toHaveBeenCalledWith(wsRoot, queries);
     });
 
     it("warns if no entries can be saved", async () => {
@@ -475,5 +425,152 @@ describe("configCommands — saveWorkspaceConfig", () => {
 
         expect(result).toBe(true);
         expect(writeConfig).toHaveBeenCalledWith(wsRoot, []);
+    });
+});
+
+describe("configCommands — importWorkspaceConfig (reconciliation)", () => {
+    let registry: TableRegistry;
+
+    beforeEach(() => {
+        registry = new TableRegistry();
+        vi.clearAllMocks();
+    });
+
+    const wsRoot = { scheme: "file", fsPath: "/workspace", path: "/workspace", toString: () => "file:///workspace" } as unknown as vscode.Uri;
+
+    it("adds new entries from config", async () => {
+        vi.mocked(readConfig).mockResolvedValueOnce({
+            entries: [
+                { name: "a", source: "./a.csv", fileType: "csv" },
+                { name: "b", source: "./b.csv", fileType: "csv" },
+            ],
+            diagnostics: [],
+            missing: false,
+        });
+
+        const result = await importWorkspaceConfig(registry, wsRoot);
+
+        expect(result).toBe(true);
+        expect(registry.get("a")).toBeDefined();
+        expect(registry.get("b")).toBeDefined();
+        expect(registry.get("a")!.loadState).toBe("configured");
+    });
+
+    it("updates changed source for configured entry", async () => {
+        registry.addConfigured([
+            { name: "a", source: "./old.csv", fileType: "csv" },
+        ]);
+
+        vi.mocked(readConfig).mockResolvedValueOnce({
+            entries: [
+                { name: "a", source: "./new.csv", fileType: "csv" },
+            ],
+            diagnostics: [],
+            missing: false,
+        });
+
+        await importWorkspaceConfig(registry, wsRoot);
+
+        expect(registry.get("a")!.filePath).toBe("./new.csv");
+    });
+
+    it("removes config-origin configured entries not in new config", async () => {
+        registry.addConfigured([
+            { name: "a", source: "./a.csv", fileType: "csv" },
+            { name: "b", source: "./b.csv", fileType: "csv" },
+        ]);
+
+        vi.mocked(readConfig).mockResolvedValueOnce({
+            entries: [
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ],
+            diagnostics: [],
+            missing: false,
+        });
+
+        await importWorkspaceConfig(registry, wsRoot);
+
+        expect(registry.get("a")).toBeDefined();
+        expect(registry.get("b")).toBeUndefined();
+    });
+
+    it("preserves loaded tables when source changes", async () => {
+        registry.addConfigured([
+            { name: "a", source: "./a.csv", fileType: "csv" },
+        ]);
+        registry.setLoadState("a", "loaded");
+
+        vi.mocked(readConfig).mockResolvedValueOnce({
+            entries: [
+                { name: "a", source: "./new.csv", fileType: "csv" },
+            ],
+            diagnostics: [],
+            missing: false,
+        });
+
+        await importWorkspaceConfig(registry, wsRoot);
+
+        // Should NOT update because it's loaded
+        expect(registry.get("a")!.loadState).toBe("loaded");
+    });
+
+    it("preserves ad-hoc entries with same name", async () => {
+        registry.add({
+            name: "a",
+            filePath: "/workspace/a.csv",
+            fileType: "csv",
+            isS3: false,
+        });
+
+        vi.mocked(readConfig).mockResolvedValueOnce({
+            entries: [
+                { name: "a", source: "./a.csv", fileType: "csv" },
+            ],
+            diagnostics: [],
+            missing: false,
+        });
+
+        await importWorkspaceConfig(registry, wsRoot);
+
+        // Ad-hoc entry preserved
+        expect(registry.get("a")!.origin).toBe("adhoc");
+    });
+
+    it("idempotent re-import does not duplicate entries", async () => {
+        const config = [
+            { name: "a", source: "./a.csv", fileType: "csv" as const },
+        ];
+        vi.mocked(readConfig).mockResolvedValue({
+            entries: config,
+            diagnostics: [],
+            missing: false,
+        });
+
+        await importWorkspaceConfig(registry, wsRoot);
+        await importWorkspaceConfig(registry, wsRoot);
+
+        expect(registry.getAll().filter(e => e.name === "a").length).toBe(1);
+    });
+
+    it("returns false when config has diagnostics", async () => {
+        vi.mocked(readConfig).mockResolvedValueOnce({
+            entries: [],
+            diagnostics: [{ message: "bad config" }],
+            missing: false,
+        });
+
+        const result = await importWorkspaceConfig(registry, wsRoot);
+        expect(result).toBe(false);
+    });
+
+    it("returns false when config is missing", async () => {
+        vi.mocked(readConfig).mockResolvedValueOnce({
+            entries: [],
+            diagnostics: [],
+            missing: true,
+        });
+
+        const result = await importWorkspaceConfig(registry, wsRoot);
+        expect(result).toBe(false);
     });
 });

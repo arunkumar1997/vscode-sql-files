@@ -1,7 +1,169 @@
-import { describe, it, expect } from "vitest";
-import { parseAndValidateConfig, toConfigEntry, ConfigReadError, parseS3Uri, isValidSource } from "../../src/configManager";
+import { describe, it, expect, beforeEach } from "vitest";
+import { parseAndValidateConfig, toConfigEntry, ConfigReadError, parseS3Uri, isValidSource, readSavedQueries, writeSavedQueries, sanitizeQueryBaseName } from "../../src/configManager";
 import { TableEntry } from "../../src/types";
-import { Uri } from "../helpers/vscode-mock";
+import { FileType, Uri, workspace } from "../helpers/vscode-mock";
+
+describe("configManager — saved queries", () => {
+    beforeEach(() => {
+        workspace.fs.writeFile.mockClear();
+        workspace.fs.delete.mockClear();
+        workspace.fs.readDirectory.mockClear();
+    });
+
+    it("reads sorted SQL files and ignores other entries", async () => {
+        workspace.fs.readDirectory.mockResolvedValueOnce([
+            ["second.sql", FileType.File],
+            ["notes.txt", FileType.File],
+            ["first.sql", FileType.File],
+            ["nested", FileType.Directory],
+        ] as never);
+        workspace.fs.readFile.mockImplementationOnce(async (uri: { fsPath: string }) =>
+            Buffer.from(uri.fsPath.endsWith("first.sql") ? "SELECT 1" : "SELECT 2"),
+        );
+        workspace.fs.readFile.mockImplementationOnce(async (uri: { fsPath: string }) =>
+            Buffer.from(uri.fsPath.endsWith("first.sql") ? "SELECT 1" : "SELECT 2"),
+        );
+
+        await expect(readSavedQueries(Uri.file("/workspace") as never)).resolves.toEqual([
+            { name: "first", sql: "SELECT 1" },
+            { name: "second", sql: "SELECT 2" },
+        ]);
+    });
+
+    it("writes query tabs as SQL files with sanitized names (via temp+rename)", async () => {
+        await writeSavedQueries(Uri.file("/workspace") as never, [
+            { name: "daily/sales", sql: "SELECT * FROM sales" },
+            { name: "daily/sales", sql: "SELECT COUNT(*) FROM sales" },
+        ]);
+
+        // Files are written to temp then renamed to final
+        const renameCalls = workspace.fs.rename.mock.calls;
+        const finalPaths = renameCalls.map((c: [{ path: string }, { path: string }]) => c[1].path);
+        expect(finalPaths.some((p: string) => p.match(/daily-sales\.sql$/))).toBe(true);
+        expect(finalPaths.some((p: string) => p.match(/daily-sales-2\.sql$/))).toBe(true);
+
+        // Content goes through writeFile (to temp)
+        const writeCalls = workspace.fs.writeFile.mock.calls;
+        const contents = writeCalls.map((c: [unknown, Buffer]) => c[1].toString());
+        expect(contents).toContain("SELECT * FROM sales");
+        expect(contents).toContain("SELECT COUNT(*) FROM sales");
+    });
+
+    it("never deletes unmanaged pre-existing SQL files (P0 regression)", async () => {
+        // No previous manifest → all existing files treated as unmanaged
+        await writeSavedQueries(Uri.file("/workspace") as never, [
+            { name: "active", sql: "SELECT 1" },
+        ]);
+
+        // No stale managed files to delete (previous manifest was empty)
+        const deleteCalls = workspace.fs.delete.mock.calls;
+        expect(deleteCalls.length).toBe(0);
+    });
+
+    it("preserves non-SQL files in queries directory", async () => {
+        await writeSavedQueries(Uri.file("/workspace") as never, [
+            { name: "q1", sql: "SELECT 1" },
+        ]);
+
+        expect(workspace.fs.delete).not.toHaveBeenCalled();
+    });
+
+    it("ignores orphan .staging.*.sql files in readSavedQueries", async () => {
+        workspace.fs.readDirectory.mockResolvedValueOnce([
+            ["valid.sql", FileType.File],
+            [".staging.abcd1234.temp.sql", FileType.File],
+            [".staging.deadbeef.report.sql", FileType.File],
+            ["other.sql", FileType.File],
+        ] as never);
+        workspace.fs.readFile.mockImplementation(async (uri: { fsPath: string }) => {
+            if (uri.fsPath.endsWith("valid.sql")) return Buffer.from("SELECT 1");
+            if (uri.fsPath.endsWith("other.sql")) return Buffer.from("SELECT 2");
+            return Buffer.from("ORPHAN");
+        });
+
+        const result = await readSavedQueries(Uri.file("/workspace") as never);
+        expect(result).toEqual([
+            { name: "other", sql: "SELECT 2" },
+            { name: "valid", sql: "SELECT 1" },
+        ]);
+        // Staging files should never have been read
+        const readCalls = workspace.fs.readFile.mock.calls;
+        const readPaths = readCalls.map((c: [{ fsPath: string }]) => c[0].fsPath);
+        expect(readPaths.every((p: string) => !p.includes(".staging."))).toBe(true);
+    });
+});
+
+describe("configManager — sanitizeQueryBaseName", () => {
+    it("replaces invalid filename characters with single hyphen", () => {
+        expect(sanitizeQueryBaseName("foo:::bar", 0)).toBe("foo-bar");
+        expect(sanitizeQueryBaseName("a/b\\c*d", 0)).toBe("a-b-c-d");
+    });
+
+    it("collapses consecutive hyphens from character runs", () => {
+        expect(sanitizeQueryBaseName("hello///world", 0)).toBe("hello-world");
+        expect(sanitizeQueryBaseName("a<>|b", 0)).toBe("a-b");
+    });
+
+    it("strips leading and trailing hyphens", () => {
+        expect(sanitizeQueryBaseName("/name/", 0)).toBe("name");
+        expect(sanitizeQueryBaseName("***test***", 0)).toBe("test");
+    });
+
+    it("caps very long names to 100 characters", () => {
+        const longName = "a".repeat(200);
+        const result = sanitizeQueryBaseName(longName, 0);
+        expect(result.length).toBeLessThanOrEqual(100);
+        expect(result).toBe("a".repeat(100));
+    });
+
+    it("handles Unicode characters (preserved)", () => {
+        expect(sanitizeQueryBaseName("日本語クエリ", 0)).toBe("日本語クエリ");
+        expect(sanitizeQueryBaseName("données/café", 0)).toBe("données-café");
+    });
+
+    it("falls back to query-N for empty/whitespace names", () => {
+        expect(sanitizeQueryBaseName("", 0)).toBe("query-1");
+        expect(sanitizeQueryBaseName("   ", 2)).toBe("query-3");
+        expect(sanitizeQueryBaseName("///", 4)).toBe("query-5");
+    });
+
+    it("strips .sql suffix before sanitization", () => {
+        expect(sanitizeQueryBaseName("report.sql", 0)).toBe("report");
+        expect(sanitizeQueryBaseName("report.SQL", 0)).toBe("report");
+    });
+
+    it("handles duplicate name suffixes deterministically", () => {
+        // Suffixes are handled by writeSavedQueries, not the sanitizer
+        // but the base name must be stable
+        const a = sanitizeQueryBaseName("my query", 0);
+        const b = sanitizeQueryBaseName("my query", 1);
+        expect(a).toBe(b);
+    });
+
+    it("prefixes Windows reserved device names", () => {
+        expect(sanitizeQueryBaseName("CON", 0)).toBe("_CON");
+        expect(sanitizeQueryBaseName("con", 0)).toBe("_con");
+        expect(sanitizeQueryBaseName("PRN", 0)).toBe("_PRN");
+        expect(sanitizeQueryBaseName("AUX", 0)).toBe("_AUX");
+        expect(sanitizeQueryBaseName("NUL", 0)).toBe("_NUL");
+        expect(sanitizeQueryBaseName("COM1", 0)).toBe("_COM1");
+        expect(sanitizeQueryBaseName("COM9", 0)).toBe("_COM9");
+        expect(sanitizeQueryBaseName("LPT1", 0)).toBe("_LPT1");
+        expect(sanitizeQueryBaseName("LPT9", 0)).toBe("_LPT9");
+        // With .sql extension stripped first
+        expect(sanitizeQueryBaseName("CON.sql", 0)).toBe("_CON");
+        expect(sanitizeQueryBaseName("nul.SQL", 0)).toBe("_nul");
+        // With spaces (trimmed to bare name)
+        expect(sanitizeQueryBaseName("  AUX  ", 0)).toBe("_AUX");
+    });
+
+    it("does not prefix names that only contain a reserved name as substring", () => {
+        expect(sanitizeQueryBaseName("CONQUER", 0)).toBe("CONQUER");
+        expect(sanitizeQueryBaseName("PRNT", 0)).toBe("PRNT");
+        expect(sanitizeQueryBaseName("NULLIFY", 0)).toBe("NULLIFY");
+        expect(sanitizeQueryBaseName("COM10", 0)).toBe("COM10");
+    });
+});
 
 describe("configManager — parseAndValidateConfig", () => {
     it("returns empty entries for missing/empty content", () => {

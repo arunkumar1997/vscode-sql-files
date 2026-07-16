@@ -72,6 +72,7 @@ export const workspace = {
   onDidChangeConfiguration: vi.fn(),
   fs: {
     readFile: vi.fn().mockRejectedValue(Object.assign(new Error("File not found"), { code: "FileNotFound" })),
+    readDirectory: vi.fn().mockRejectedValue(Object.assign(new Error("Directory not found"), { code: "FileNotFound" })),
     writeFile: vi.fn().mockResolvedValue(undefined),
     createDirectory: vi.fn().mockResolvedValue(undefined),
     rename: vi.fn().mockResolvedValue(undefined),
@@ -79,6 +80,13 @@ export const workspace = {
     stat: vi.fn().mockRejectedValue(new Error("Not implemented")),
   },
 };
+
+export enum FileType {
+  Unknown = 0,
+  File = 1,
+  Directory = 2,
+  SymbolicLink = 64,
+}
 
 // --- commands ---
 export const commands = {
@@ -107,11 +115,21 @@ export class TreeItem {
   }
 }
 
-// --- ThemeIcon ---
-export class ThemeIcon {
+// --- ThemeColor ---
+export class ThemeColor {
   id: string;
   constructor(id: string) {
     this.id = id;
+  }
+}
+
+// --- ThemeIcon ---
+export class ThemeIcon {
+  id: string;
+  color?: ThemeColor;
+  constructor(id: string, color?: ThemeColor) {
+    this.id = id;
+    this.color = color;
   }
 }
 
@@ -179,6 +197,7 @@ export class MockMemento {
 // --- Typed mock helpers for tests ---
 export interface MockWorkspaceFs {
   readFile: ReturnType<typeof vi.fn>;
+  readDirectory: ReturnType<typeof vi.fn>;
   writeFile: ReturnType<typeof vi.fn>;
   createDirectory: ReturnType<typeof vi.fn>;
   rename: ReturnType<typeof vi.fn>;
@@ -189,6 +208,7 @@ export interface MockWorkspaceFs {
 export function mockWorkspaceFs(overrides?: Partial<MockWorkspaceFs>): MockWorkspaceFs {
   const mock: MockWorkspaceFs = {
     readFile: vi.fn().mockRejectedValue(Object.assign(new Error("File not found"), { code: "FileNotFound" })),
+    readDirectory: vi.fn().mockResolvedValue([]),
     writeFile: vi.fn().mockResolvedValue(undefined),
     createDirectory: vi.fn().mockResolvedValue(undefined),
     rename: vi.fn().mockResolvedValue(undefined),

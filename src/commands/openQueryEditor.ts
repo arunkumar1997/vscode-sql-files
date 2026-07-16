@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
+import * as crypto from "crypto";
 import { DuckDBEngine } from "../duckdbEngine";
 import { TableRegistry } from "../tableRegistry";
-import { ExportFormat, TableEntry } from "../types";
+import { ExportFormat, SavedQuery, TableEntry } from "../types";
 import { getConfig } from "../s3Handler";
 
 const VALID_EXPORT_FORMATS = new Set<string>(["csv", "parquet"]);
@@ -9,9 +10,69 @@ const VALID_EXPORT_FORMATS = new Set<string>(["csv", "parquet"]);
 let panel: vscode.WebviewPanel | undefined;
 /** Track the original SQL per tab for export (keyed by tabId). */
 const tabSqlMap = new Map<string, string>();
+let workspaceQueries: SavedQuery[] = [];
+
+/** Pending snapshot requests keyed by request id. */
+const pendingSnapshots = new Map<string, { resolve: (queries: SavedQuery[]) => void; reject: (err: Error) => void }>();
+
+/** Timeout for snapshot requests (ms). */
+const SNAPSHOT_TIMEOUT_MS = 3000;
+
+export function setWorkspaceQueries(queries: SavedQuery[]): void {
+  workspaceQueries = queries;
+  // If panel is already open, push updated queries immediately
+  if (panel) {
+    panel.webview.postMessage({
+      type: "savedQueries",
+      payload: { queries: workspaceQueries },
+    });
+  }
+}
+
+export function getWorkspaceQueries(): SavedQuery[] {
+  return workspaceQueries;
+}
+
+export function hasWorkspaceQueries(): boolean {
+  return workspaceQueries.length > 0;
+}
 
 export function isQueryEditorOpen(): boolean {
   return panel !== undefined;
+}
+
+/**
+ * Request a current tab snapshot from an open webview panel.
+ * Returns the webview's current React state immediately (not debounced).
+ * If no panel is open, returns host-side workspaceQueries.
+ * If response times out or panel disposes, throws with a clear message.
+ */
+export async function requestQueryTabsSnapshot(): Promise<SavedQuery[]> {
+  if (!panel) {
+    return workspaceQueries;
+  }
+  const requestId = crypto.randomBytes(8).toString("hex");
+  return new Promise<SavedQuery[]>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingSnapshots.delete(requestId);
+      reject(new Error("Query tabs snapshot timed out — panel did not respond within 3 seconds."));
+    }, SNAPSHOT_TIMEOUT_MS);
+
+    pendingSnapshots.set(requestId, {
+      resolve: (queries) => {
+        clearTimeout(timer);
+        pendingSnapshots.delete(requestId);
+        resolve(queries);
+      },
+      reject: (err) => {
+        clearTimeout(timer);
+        pendingSnapshots.delete(requestId);
+        reject(err);
+      },
+    });
+
+    panel!.webview.postMessage({ type: "requestQueryTabs", payload: { requestId } });
+  });
 }
 
 export function openQueryEditor(
@@ -28,7 +89,11 @@ export function openQueryEditor(
   }
   if (panel) {
     panel.reveal(vscode.ViewColumn.One);
-    sendTables(registry.getAll());
+    sendTables(registry.getLoaded());
+    panel.webview.postMessage({
+      type: "savedQueries",
+      payload: { queries: workspaceQueries },
+    });
     return;
   }
 
@@ -53,8 +118,8 @@ export function openQueryEditor(
   panel.webview.html = buildHtml(panel.webview, scriptUri, styleUri);
 
   const tablesSub = registry.onDidChange(() => {
-    const tables = registry.getAll();
-    if (tables.length === 0) {
+    const tables = registry.getLoaded();
+    if (tables.length === 0 && registry.getAll().length === 0) {
       panel?.dispose();
     } else {
       sendTables(tables);
@@ -65,7 +130,44 @@ export function openQueryEditor(
   panel.webview.onDidReceiveMessage(
     async (msg) => {
       if (msg.type === "ready") {
-        sendTables(registry.getAll());
+        sendTables(registry.getLoaded());
+        panel?.webview.postMessage({
+          type: "savedQueries",
+          payload: { queries: workspaceQueries },
+        });
+        return;
+      }
+      if (msg.type === "queryTabsChanged") {
+        const queries = (msg.payload as { queries?: unknown })?.queries;
+        if (Array.isArray(queries)) {
+          workspaceQueries = queries.filter(
+            (query): query is SavedQuery =>
+              typeof query === "object" &&
+              query !== null &&
+              typeof (query as SavedQuery).name === "string" &&
+              typeof (query as SavedQuery).sql === "string",
+          );
+        }
+        return;
+      }
+      if (msg.type === "queryTabsSnapshot") {
+        const payload = msg.payload as { requestId?: string; queries?: unknown } | undefined;
+        const requestId = payload?.requestId;
+        if (typeof requestId === "string" && pendingSnapshots.has(requestId)) {
+          const pending = pendingSnapshots.get(requestId)!;
+          const queries = payload?.queries;
+          if (Array.isArray(queries)) {
+            const valid = queries.filter(
+              (q): q is SavedQuery =>
+                typeof q === "object" && q !== null &&
+                typeof (q as SavedQuery).name === "string" &&
+                typeof (q as SavedQuery).sql === "string",
+            );
+            pending.resolve(valid);
+          } else {
+            pending.resolve(workspaceQueries);
+          }
+        }
         return;
       }
       if (msg.type === "runQuery") {
@@ -81,6 +183,11 @@ export function openQueryEditor(
   );
 
   panel.onDidDispose(() => {
+    // Reject any pending snapshot requests
+    for (const [, pending] of pendingSnapshots) {
+      pending.reject(new Error("Query Editor panel was disposed before snapshot response."));
+    }
+    pendingSnapshots.clear();
     panel = undefined;
     tabSqlMap.clear();
     tablesSub.dispose();

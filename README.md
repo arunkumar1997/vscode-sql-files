@@ -78,7 +78,10 @@ This works at any depth — only the **last subfolder** name is used as the tabl
 ### 🗂️ Sidebar Explorer
 
 - Helpful message shown when no tables are loaded so you always know what to do next
-- Tree view listing all loaded tables with expandable column details (name + type)
+- Tree view listing configured and loaded tables, with expandable column details for loaded tables
+- **Import Workspace Configuration** rereads `.filesql/config.json` and restores missing definitions as `Not loaded` without initializing DuckDB
+- Use **Load** on an individual table only when you need to query it
+- **Save Workspace Configuration** writes portable table definitions to `.filesql/config.json` and query tabs to `.filesql/queries/*.sql`
 - **Right-click** a table to **Rename**, **Remove**, **Copy Table Name**
 - **Right-click** a column to **Copy Column Name**
 - S3-sourced tables show the original `s3://` URI as a tooltip
@@ -129,6 +132,11 @@ Open the **File SQL** sidebar (database icon in the Activity Bar), then:
 
 - Click **＋** → enter a local path (`/data/sales.csv`) or S3 URI (`s3://bucket/prefix/`)
 - Click **📁** → pick a local folder to import all supported files as tables
+- Click the **save** button to persist the workspace tables and current query tabs
+- Click **Import Workspace Configuration** to restore table definitions lazily and reopen saved query tabs
+- Click **Load** on each table when you want DuckDB to materialize it
+
+Saved queries are normal SQL files under `.filesql/queries/`. The `.filesql/` directory is ignored by Git by default so workspace configuration and queries remain local.
 
 ### 3. Query
 
@@ -228,7 +236,8 @@ E2E tests require a display server. On CI or headless Linux use `xvfb-run -a npm
 
 ## 🗺️ Roadmap
 
-- [ ] Saved queries and query history persistence
+- [x] Saved query persistence
+- [ ] Query history persistence
 - [ ] Data visualization (charts and graphs)
 - [ ] Additional file formats (Excel, Avro, SQLite)
 

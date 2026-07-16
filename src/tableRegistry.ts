@@ -191,7 +191,7 @@ export class TableRegistry {
         value: source,
         writable: false,
         enumerable: true,
-        configurable: false,
+        configurable: true,
       });
       this.tables.set(name, tableEntry);
       this.runtimeIds.set(name, crypto.randomUUID());
@@ -251,5 +251,113 @@ export class TableRegistry {
 
   dispose(): void {
     this._onDidChange.dispose();
+  }
+
+  /**
+   * Reconcile registry state against a new set of config entries.
+   * - Adds new entries not already present.
+   * - Updates changed config-origin entries that are configured or error (not loading/loaded).
+   * - Removes config-origin configured/error entries that are no longer in config.
+   * - Preserves loaded tables, loading tables, and all ad-hoc entries.
+   * Returns a report of actions taken.
+   */
+  reconcileConfig(entries: ConfigTableEntry[]): {
+    added: string[];
+    updated: string[];
+    removed: string[];
+    skipped: string[];
+  } {
+    const result = { added: [] as string[], updated: [] as string[], removed: [] as string[], skipped: [] as string[] };
+
+    // Build lookup of incoming entries
+    const incoming = new Map<string, ConfigTableEntry>();
+    for (const e of entries) {
+      incoming.set(e.name.trim(), e);
+    }
+
+    // Update config digest
+    this._lastConfigDigest = this.computeConfigDigest(entries);
+
+    // Pass 1: Remove config-origin entries no longer in incoming (only configured/error)
+    for (const [name, existing] of Array.from(this.tables.entries())) {
+      if (existing.origin !== "config") continue;
+      if (!incoming.has(name)) {
+        if (existing.loadState === "configured" || existing.loadState === "error") {
+          this.tables.delete(name);
+          this.runtimeIds.delete(name);
+          result.removed.push(name);
+        } else {
+          // loading or loaded — preserve, report as skipped
+          result.skipped.push(name);
+        }
+      }
+    }
+
+    // Pass 2: Add or update entries
+    for (const entry of entries) {
+      const name = entry.name.trim();
+      const source = entry.source.trim();
+      const existing = this.tables.get(name);
+
+      if (!existing) {
+        // New entry — check for ad-hoc collision
+        const tableEntry: TableEntry = {
+          name,
+          filePath: source,
+          fileType: entry.fileType,
+          isS3: source.startsWith("s3://"),
+          sourceUri: source.startsWith("s3://") ? source : undefined,
+          hivePartitioning: entry.hivePartitioning,
+          loadState: "configured",
+          origin: "config",
+          source,
+        };
+        Object.defineProperty(tableEntry, "source", {
+          value: source,
+          writable: false,
+          enumerable: true,
+          configurable: true,
+        });
+        this.tables.set(name, tableEntry);
+        this.runtimeIds.set(name, crypto.randomUUID());
+        result.added.push(name);
+      } else if (existing.origin === "config") {
+        // Config-origin entry exists — check if source changed
+        const existingSource = (existing.source ?? existing.filePath ?? "").trim();
+        const sourceChanged = existingSource !== source || existing.fileType !== entry.fileType || (existing.hivePartitioning ?? false) !== (entry.hivePartitioning ?? false);
+        if (sourceChanged) {
+          if (existing.loadState === "configured" || existing.loadState === "error") {
+            // Safe to update
+            existing.filePath = source;
+            existing.fileType = entry.fileType;
+            existing.isS3 = source.startsWith("s3://");
+            existing.sourceUri = source.startsWith("s3://") ? source : undefined;
+            existing.hivePartitioning = entry.hivePartitioning;
+            existing.loadState = "configured";
+            existing.loadError = undefined;
+            Object.defineProperty(existing, "source", {
+              value: source,
+              writable: false,
+              enumerable: true,
+              configurable: true,
+            });
+            result.updated.push(name);
+          } else {
+            // loading or loaded — skip update
+            result.skipped.push(name);
+          }
+        }
+        // If source unchanged — no-op
+      } else {
+        // Ad-hoc entry with same name — skip (ad-hoc wins)
+        result.skipped.push(name);
+      }
+    }
+
+    const changed = result.added.length > 0 || result.updated.length > 0 || result.removed.length > 0;
+    if (changed) {
+      this._onDidChange.fire();
+    }
+    return result;
   }
 }

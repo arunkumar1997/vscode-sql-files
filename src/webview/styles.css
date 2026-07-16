@@ -134,6 +134,12 @@ body {
   background: var(--vscode-tab-hoverBackground, #2a2d2e);
 }
 
+.tab:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
 .tab--active {
   color: var(--tab-active-fg);
   background: var(--tab-active-bg);
@@ -191,6 +197,9 @@ body {
   opacity: 0;
   cursor: pointer;
   color: var(--fg);
+  background: none;
+  border: none;
+  padding: 0;
 }
 
 .tab:hover .tab-close,
@@ -407,4 +416,12 @@ body {
   border-left: 3px solid var(--vscode-terminal-ansiGreen, #89d185);
   margin: 8px;
   font-size: 13px;
+}
+
+.empty-table-hint {
+  padding: 16px 12px;
+  color: var(--tab-inactive-fg);
+  text-align: center;
+  font-size: 13px;
+  margin-top: 24px;
 }

@@ -39,6 +39,11 @@ export interface ConfigTableEntry {
   hivePartitioning?: boolean;
 }
 
+export interface SavedQuery {
+  name: string;
+  sql: string;
+}
+
 export interface ColumnInfo {
   name: string;
   type: string;

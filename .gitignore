@@ -9,3 +9,4 @@ coverage/
 .vitest-cache/
 .vscode-test/
 out-e2e/
+.filesql/
