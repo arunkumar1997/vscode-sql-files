@@ -70,6 +70,17 @@ describe("managed queries — writeSavedQueries", () => {
 
         // Should have 3 renames: 2 query files + 1 manifest
         expect(mockFs.rename.mock.calls.length).toBe(3);
+        const manifestWrite = mockFs.writeFile.mock.calls.find(
+            (call: [{ path: string }, Buffer]) =>
+                call[0].path.includes(".filesql-managed.tmp."),
+        );
+        expect(JSON.parse(manifestWrite![1].toString())).toMatchObject({
+            files: ["report.sql", "analysis.sql"],
+            queries: [
+                { name: "report", file: "report.sql" },
+                { name: "analysis", file: "analysis.sql" },
+            ],
+        });
     });
 
     it("preserves unmanaged SQL file (does not delete)", async () => {

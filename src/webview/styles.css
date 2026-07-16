@@ -98,15 +98,23 @@ body {
 }
 
 /* ── Tab bar ── */
+.tab-strip {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 35px;
+  background: var(--tab-bar-bg);
+  border-bottom: 1px solid var(--tab-border);
+}
+
 .tab-bar {
   display: flex;
   align-items: stretch;
+  flex: 1;
+  min-width: 0;
   background: var(--tab-bar-bg);
-  border-bottom: 1px solid var(--tab-border);
   overflow-x: auto;
-  flex-shrink: 0;
   scrollbar-width: none;
-  min-height: 35px;
 }
 .tab-bar::-webkit-scrollbar { display: none; }
 
@@ -212,11 +220,12 @@ body {
   color: var(--fg);
   font-size: 18px;
   line-height: 1;
-  padding: 0 12px;
+  width: 35px;
+  height: 35px;
+  padding: 0;
   cursor: pointer;
   opacity: 0.45;
   flex-shrink: 0;
-  align-self: center;
 }
 .tab-add:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, #3a3d41); }
 

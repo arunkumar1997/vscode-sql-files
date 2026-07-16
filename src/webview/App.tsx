@@ -5,6 +5,7 @@ import { ResultsTable } from "./components/ResultsTable";
 import { Toolbar } from "./components/Toolbar";
 import { ExportFormat, QueryResult, SavedQuery, TableEntry } from "../types";
 import { isSuccessStatus, formatExportStatus } from "./exportHelpers";
+import { ensureUniqueQueryNames, uniqueQueryName } from "../queryNames";
 
 declare const acquireVsCodeApi: () => {
   postMessage: (msg: unknown) => void;
@@ -45,6 +46,18 @@ function createSavedTab(query: SavedQuery): TabState {
   return { ...tab, label: query.name, sql: query.sql };
 }
 
+function createSavedTabs(
+  queries: SavedQuery[],
+  existingNames: Iterable<string> = [],
+): TabState[] {
+  const usedNames = [...existingNames];
+  return ensureUniqueQueryNames(queries).map((query) => {
+    const name = uniqueQueryName(query.name, usedNames);
+    usedNames.push(name);
+    return createSavedTab({ ...query, name });
+  });
+}
+
 /**
  * Returns true if the tab set is still the untouched initial default
  * (one tab matching the initial tab with no edits).
@@ -77,6 +90,7 @@ export function App(): JSX.Element {
   const [renameValue, setRenameValue] = useState("");
   const pendingFocusTabRef = useRef<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const restoredQueryKeysRef = useRef(new Set<string>());
 
   // Each mounted QueryEditor registers its run function here keyed by tab id
   const runRefs = useRef<Map<string, React.MutableRefObject<() => void>>>(
@@ -112,13 +126,22 @@ export function App(): JSX.Element {
           setTables((msg.payload as { tables: TableEntry[] }).tables);
           break;
         case "savedQueries": {
-          const queries = (msg.payload as { queries: SavedQuery[] }).queries;
+          const receivedQueries = ensureUniqueQueryNames(
+            (msg.payload as { queries: SavedQuery[] }).queries,
+          );
+          const queries = receivedQueries.filter((query) => {
+            const key = `${query.name}\0${query.sql}`;
+            if (restoredQueryKeysRef.current.has(key)) {
+              return false;
+            }
+            restoredQueryKeysRef.current.add(key);
+            return true;
+          });
           if (queries.length > 0) {
-            // Item 3: If user edited initial tab, preserve edit and append restored tabs
-            const restoredTabs = queries.map(createSavedTab);
             setTabs((prev) => {
               if (isUntouchedInitialTabs(prev, initialTab.current)) {
                 // Replace untouched default with restored tabs
+                const restoredTabs = createSavedTabs(queries);
                 setActiveTabId(restoredTabs[0].id);
                 return restoredTabs;
               }
@@ -126,15 +149,59 @@ export function App(): JSX.Element {
               const existingSet = new Set(
                 prev.map((t) => `${t.label}\0${t.sql}`),
               );
-              const novel = restoredTabs.filter(
-                (t) => !existingSet.has(`${t.label}\0${t.sql}`),
+              const novelQueries = queries.filter(
+                (query) => !existingSet.has(`${query.name}\0${query.sql}`),
               );
-              if (novel.length === 0) return prev;
+              if (novelQueries.length === 0) return prev;
+              const novelTabs = createSavedTabs(
+                novelQueries,
+                prev.map((tab) => tab.label),
+              );
               setActiveTabId(prev[0].id);
-              return [...prev, ...novel];
+              return [...prev, ...novelTabs];
             });
           }
           setQueriesHydrated(true);
+          break;
+        }
+        case "openTableQuery": {
+          const query = (msg.payload as { query?: SavedQuery } | undefined)
+            ?.query;
+          if (
+            !query ||
+            typeof query.name !== "string" ||
+            typeof query.sql !== "string"
+          ) {
+            break;
+          }
+          setTabs((prev) => {
+            if (isUntouchedInitialTabs(prev, initialTab.current)) {
+              const tableTab = createSavedTab(query);
+              setActiveTabId(tableTab.id);
+              return [tableTab];
+            }
+            const tableTab = createSavedTab({
+              ...query,
+              name: uniqueQueryName(
+                query.name,
+                prev.map((tab) => tab.label),
+              ),
+            });
+            setActiveTabId(tableTab.id);
+            return [...prev, tableTab];
+          });
+          break;
+        }
+        case "openNewQuery": {
+          setTabs((prev) => {
+            const newTab = createTab();
+            newTab.label = uniqueQueryName(
+              newTab.label,
+              prev.map((tab) => tab.label),
+            );
+            setActiveTabId(newTab.id);
+            return [...prev, newTab];
+          });
           break;
         }
         case "queryResult":
@@ -307,9 +374,15 @@ export function App(): JSX.Element {
   }
 
   function addTab(): void {
-    const tab = createTab();
-    setTabs((prev) => [...prev, tab]);
-    setActiveTabId(tab.id);
+    setTabs((prev) => {
+      const tab = createTab();
+      tab.label = uniqueQueryName(
+        tab.label,
+        prev.map((existingTab) => existingTab.label),
+      );
+      setActiveTabId(tab.id);
+      return [...prev, tab];
+    });
   }
 
   function startRename(tab: TabState, e: React.MouseEvent): void {
@@ -326,7 +399,17 @@ export function App(): JSX.Element {
       if (trimmed) {
         setTabs((prev) =>
           prev.map((t) =>
-            t.id === renamingTabId ? { ...t, label: trimmed } : t,
+            t.id === renamingTabId
+              ? {
+                  ...t,
+                  label: uniqueQueryName(
+                    trimmed,
+                    prev
+                      .filter((tab) => tab.id !== renamingTabId)
+                      .map((tab) => tab.label),
+                  ),
+                }
+              : t,
           ),
         );
       }
@@ -382,88 +465,90 @@ export function App(): JSX.Element {
   return (
     <div className="app-layout">
       {/* ── Tab bar ── */}
-      <div className="tab-bar" role="tablist" aria-label="Query tabs">
-        {tabs.map((tab, idx) => (
-          <div
-            key={tab.id}
-            id={`tab-${tab.id}`}
-            className={`tab${tab.id === activeTabId ? " tab--active" : ""}${tab.running ? " tab--running" : ""}`}
-            role="tab"
-            aria-selected={tab.id === activeTabId}
-            aria-controls={`tabpanel-${tab.id}`}
-            tabIndex={tab.id === activeTabId ? 0 : -1}
-            onClick={() => setActiveTabId(tab.id)}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowRight") {
-                e.preventDefault();
-                const nextIdx = idx < tabs.length - 1 ? idx + 1 : 0;
-                const next = tabs[nextIdx];
-                setActiveTabId(next.id);
-                const nextEl = document.getElementById(`tab-${next.id}`);
-                nextEl?.focus();
-              } else if (e.key === "ArrowLeft") {
-                e.preventDefault();
-                const prevIdx = idx > 0 ? idx - 1 : tabs.length - 1;
-                const prev = tabs[prevIdx];
-                setActiveTabId(prev.id);
-                const prevEl = document.getElementById(`tab-${prev.id}`);
-                prevEl?.focus();
-              } else if (e.key === "Home") {
-                e.preventDefault();
-                const first = tabs[0];
-                setActiveTabId(first.id);
-                document.getElementById(`tab-${first.id}`)?.focus();
-              } else if (e.key === "End") {
-                e.preventDefault();
-                const last = tabs[tabs.length - 1];
-                setActiveTabId(last.id);
-                document.getElementById(`tab-${last.id}`)?.focus();
-              } else if (e.key === "Delete") {
-                e.preventDefault();
-                closeTabByKeyboard(tab.id);
-              }
-            }}
-            title={tab.label}
-          >
-            {renamingTabId === tab.id ? (
-              <input
-                ref={renameInputRef}
-                className="tab-rename-input"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={handleRenameKey}
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <span
-                className="tab-label"
-                onDoubleClick={(e) => startRename(tab, e)}
-                title="Double-click to rename"
-              >
-                {tab.label}
-              </span>
-            )}
-            <button
-              className="tab-close"
-              tabIndex={-1}
-              onClick={(e) => closeTab(tab.id, e)}
-              aria-label={`Close ${tab.label}`}
-              title="Close tab (Delete)"
+      <div className="tab-strip">
+        <div className="tab-bar" role="tablist" aria-label="Query tabs">
+          {tabs.map((tab, idx) => (
+            <div
+              key={tab.id}
+              id={`tab-${tab.id}`}
+              className={`tab${tab.id === activeTabId ? " tab--active" : ""}${tab.running ? " tab--running" : ""}`}
+              role="tab"
+              aria-selected={tab.id === activeTabId}
+              aria-controls={`tabpanel-${tab.id}`}
+              tabIndex={tab.id === activeTabId ? 0 : -1}
+              onClick={() => setActiveTabId(tab.id)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  const nextIdx = idx < tabs.length - 1 ? idx + 1 : 0;
+                  const next = tabs[nextIdx];
+                  setActiveTabId(next.id);
+                  const nextEl = document.getElementById(`tab-${next.id}`);
+                  nextEl?.focus();
+                } else if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  const prevIdx = idx > 0 ? idx - 1 : tabs.length - 1;
+                  const prev = tabs[prevIdx];
+                  setActiveTabId(prev.id);
+                  const prevEl = document.getElementById(`tab-${prev.id}`);
+                  prevEl?.focus();
+                } else if (e.key === "Home") {
+                  e.preventDefault();
+                  const first = tabs[0];
+                  setActiveTabId(first.id);
+                  document.getElementById(`tab-${first.id}`)?.focus();
+                } else if (e.key === "End") {
+                  e.preventDefault();
+                  const last = tabs[tabs.length - 1];
+                  setActiveTabId(last.id);
+                  document.getElementById(`tab-${last.id}`)?.focus();
+                } else if (e.key === "Delete") {
+                  e.preventDefault();
+                  closeTabByKeyboard(tab.id);
+                }
+              }}
+              title={tab.label}
             >
-              ×
-            </button>
-          </div>
-        ))}
+              {renamingTabId === tab.id ? (
+                <input
+                  ref={renameInputRef}
+                  className="tab-rename-input"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={handleRenameKey}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span
+                  className="tab-label"
+                  onDoubleClick={(e) => startRename(tab, e)}
+                  title="Double-click to rename"
+                >
+                  {tab.label}
+                </span>
+              )}
+              <button
+                className="tab-close"
+                tabIndex={-1}
+                onClick={(e) => closeTab(tab.id, e)}
+                aria-label={`Close ${tab.label}`}
+                title="Close tab (Delete)"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          className="tab-add"
+          onClick={addTab}
+          aria-label="New query tab"
+          title="New query tab"
+        >
+          +
+        </button>
       </div>
-      <button
-        className="tab-add"
-        onClick={addTab}
-        aria-label="New query tab"
-        title="New query tab"
-      >
-        +
-      </button>
 
       {/* ── Toolbar (run button + row count + export) ── */}
       <Toolbar

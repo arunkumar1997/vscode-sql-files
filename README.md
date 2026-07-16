@@ -133,10 +133,12 @@ Open the **File SQL** sidebar (database icon in the Activity Bar), then:
 - Click **＋** → enter a local path (`/data/sales.csv`) or S3 URI (`s3://bucket/prefix/`)
 - Click **📁** → pick a local folder to import all supported files as tables
 - Click the **save** button to persist the workspace tables and current query tabs
-- Click **Import Workspace Configuration** to restore table definitions lazily and reopen saved query tabs
-- Click **Load** on each table when you want DuckDB to materialize it
+- Click **Import Workspace Configuration** to reopen saved query tabs and automatically register local files and folders as DuckDB views
+- Click **Load** for S3 tables when you are ready to download and query them
 
-Saved queries are normal SQL files under `.filesql/queries/`. The `.filesql/` directory is ignored by Git by default so workspace configuration and queries remain local.
+Local configured tables load automatically at startup and after import without copying the full dataset into memory. Set `fileSql.autoLoadLocal` to `false` to keep local tables lazy as well.
+
+Saved queries are normal SQL files under `.filesql/queries/`, so they can be reviewed and shared with the rest of the workspace configuration.
 
 ### 3. Query
 

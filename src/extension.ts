@@ -19,6 +19,7 @@ import { TableEntry } from "./types";
 import { initLogger, log } from "./logger";
 import {
   loadTable,
+  triggerAutoLoadLocal,
   importWorkspaceConfig,
   unloadTable,
   reloadTable,
@@ -34,6 +35,19 @@ export interface TestApi {
 
 let engine: DuckDBEngine | undefined;
 let registry: TableRegistry | undefined;
+
+export function tableNameFromContext(value: unknown): string | undefined {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const entry = (value as { entry?: { name?: unknown } }).entry;
+  return typeof entry?.name === "string" && entry.name.length > 0
+    ? entry.name
+    : undefined;
+}
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -103,8 +117,14 @@ export async function activate(
     vscode.commands.registerCommand("fileSql.addFolder", () =>
       addFolder(registry!, engine!),
     ),
-    vscode.commands.registerCommand("fileSql.openQueryEditor", () =>
-      openQueryEditor(context, registry!, engine!),
+    vscode.commands.registerCommand(
+      "fileSql.openQueryEditor",
+      (argument?: unknown) => {
+        const tableName =
+          tableNameFromContext(argument) ??
+          tableNameFromContext(treeView.selection[0]);
+        openQueryEditor(context, registry!, engine!, tableName);
+      },
     ),
     vscode.commands.registerCommand("fileSql.clearTables", () =>
       clearTables(registry!, engine!),
@@ -164,6 +184,11 @@ export async function activate(
       }
       const imported = await importWorkspaceConfig(registry!, wsFolder.uri);
       if (imported) {
+        await triggerAutoLoadLocal(
+          registry!,
+          engine!,
+          wsFolder.uri.fsPath,
+        );
         // Item 5: Always reread queries from disk on import
         try {
           const queries = await readSavedQueries(wsFolder.uri);
@@ -173,7 +198,7 @@ export async function activate(
           log(`[config] Error re-reading saved queries: ${err instanceof Error ? err.message : String(err)}`);
         }
         if (hasWorkspaceQueries() && registry!.getAll().length > 0) {
-          openQueryEditor(context, registry!, engine!);
+          openQueryEditor(context, registry!, engine!, false);
         }
       }
     }),
@@ -247,7 +272,7 @@ export async function activate(
           );
 
           // open query editor with the table name pre-filled
-          await vscode.commands.executeCommand("fileSql.openQueryEditor");
+          await vscode.commands.executeCommand("fileSql.openQueryEditor", entry.name);
 
           vscode.window.showInformationMessage(
             `File SQL: Added table "${entry.name}".`,
@@ -260,6 +285,13 @@ export async function activate(
       },
     ),
   );
+
+  if (hasWorkspaceQueries() && registry.getAll().length > 0) {
+    openQueryEditor(context, registry, engine, false);
+  }
+  if (wsFolder) {
+    void triggerAutoLoadLocal(registry, engine, wsFolder.uri.fsPath);
+  }
 
   // Expose test API only when running in the Extension Development Host
   if (context.extensionMode === vscode.ExtensionMode.Test) {

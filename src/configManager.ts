@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as crypto from "crypto";
 import { ConfigTableEntry, FileType, SavedQuery, TableEntry } from "./types";
 import { logWarn, logError } from "./logger";
+import { ensureUniqueQueryNames } from "./queryNames";
 
 /** Directory and filename for workspace config. */
 const CONFIG_DIR = ".filesql";
@@ -349,13 +350,43 @@ export async function readSavedQueries(workspaceRoot: vscode.Uri): Promise<Saved
         throw err;
     }
 
+    const sqlFiles = new Map(
+        entries
+            .filter(([filename, fileType]) =>
+                fileType === vscode.FileType.File &&
+                filename.toLowerCase().endsWith(".sql") &&
+                !filename.startsWith(".staging."),
+            )
+            .map(([filename]) => [filename.toLowerCase(), filename]),
+    );
+    const hasManifest = entries.some(([filename, fileType]) =>
+        fileType === vscode.FileType.File && filename === MANAGED_MANIFEST,
+    );
+    const manifest = hasManifest
+        ? await readManagedManifest(queriesUri)
+        : { files: [], queries: [] };
+    const orderedManaged = manifest.queries.length > 0
+        ? manifest.queries
+        : manifest.files.map((file) => ({ name: file.slice(0, -4), file }));
+    const consumed = new Set<string>();
     const queries: SavedQuery[] = [];
-    for (const [filename, fileType] of entries.sort(([a], [b]) => a.localeCompare(b))) {
-        if (fileType !== vscode.FileType.File || !filename.toLowerCase().endsWith(".sql")) {
-            continue;
+
+    async function appendQuery(name: string, filename: string): Promise<void> {
+        const actualFilename = sqlFiles.get(filename.toLowerCase());
+        if (!actualFilename || consumed.has(actualFilename.toLowerCase())) {
+            return;
         }
-        // Skip orphan staging temp files (.staging.XXXX.name.sql)
-        if (filename.startsWith(".staging.")) {
+        consumed.add(actualFilename.toLowerCase());
+        const uri = vscode.Uri.joinPath(queriesUri, actualFilename);
+        const content = await vscode.workspace.fs.readFile(uri);
+        queries.push({ name, sql: Buffer.from(content).toString("utf-8") });
+    }
+
+    for (const query of orderedManaged) {
+        await appendQuery(query.name, query.file);
+    }
+    for (const filename of [...sqlFiles.values()].sort((a, b) => a.localeCompare(b))) {
+        if (consumed.has(filename.toLowerCase())) {
             continue;
         }
         const uri = vscode.Uri.joinPath(queriesUri, filename);
@@ -365,7 +396,7 @@ export async function readSavedQueries(workspaceRoot: vscode.Uri): Promise<Saved
             sql: Buffer.from(content).toString("utf-8"),
         });
     }
-    return queries;
+    return ensureUniqueQueryNames(queries);
 }
 
 /** Max base name length for query filenames (leaves room for `-N.sql` suffix). */
@@ -378,6 +409,8 @@ const MANAGED_MANIFEST = ".filesql-managed.json";
 interface ManagedManifest {
     /** Filenames (not full paths) of query SQL files managed by File SQL. */
     files: string[];
+    /** Ordered query metadata preserving exact tab labels across save/import. */
+    queries: Array<{ name: string; file: string }>;
 }
 
 /**
@@ -449,12 +482,23 @@ async function readManagedManifest(queriesUri: vscode.Uri): Promise<ManagedManif
         const raw = await vscode.workspace.fs.readFile(manifestUri);
         const parsed = JSON.parse(Buffer.from(raw).toString("utf-8"));
         if (parsed && Array.isArray(parsed.files)) {
-            return { files: parsed.files.filter((f: unknown) => typeof f === "string") };
+            const files = parsed.files.filter((file: unknown): file is string =>
+                typeof file === "string",
+            );
+            const queries = Array.isArray(parsed.queries)
+                ? parsed.queries.filter(
+                    (query: unknown): query is { name: string; file: string } =>
+                        typeof query === "object" && query !== null &&
+                        typeof (query as { name?: unknown }).name === "string" &&
+                        typeof (query as { file?: unknown }).file === "string",
+                )
+                : [];
+            return { files, queries };
         }
     } catch {
         // Missing or corrupt — treat as empty (conservative)
     }
-    return { files: [] };
+    return { files: [], queries: [] };
 }
 
 /**
@@ -497,6 +541,7 @@ export async function writeSavedQueries(
     workspaceRoot: vscode.Uri,
     queries: SavedQuery[],
 ): Promise<void> {
+    const uniqueQueries = ensureUniqueQueryNames(queries);
     const queriesUri = vscode.Uri.joinPath(workspaceRoot, CONFIG_DIR, QUERIES_DIR);
     await vscode.workspace.fs.createDirectory(queriesUri);
 
@@ -520,8 +565,8 @@ export async function writeSavedQueries(
     const generatedLower = new Set<string>();
     const writeOps: Array<{ filename: string; sql: string }> = [];
 
-    for (let index = 0; index < queries.length; index++) {
-        const query = queries[index];
+    for (let index = 0; index < uniqueQueries.length; index++) {
+        const query = uniqueQueries[index];
         const baseName = sanitizeQueryBaseName(query.name, index);
         let filename = `${baseName}.sql`;
         let suffix = 2;
@@ -579,7 +624,13 @@ export async function writeSavedQueries(
     // 6. Write manifest atomically (commits the batch).
     //    If manifest write fails, query files are newer but old manifest is intact
     //    so next run will reconcile safely (conservative: old manifest + new files on disk).
-    await writeManagedManifest(queriesUri, { files: newManagedFiles });
+    await writeManagedManifest(queriesUri, {
+        files: newManagedFiles,
+        queries: writeOps.map((operation, index) => ({
+            name: uniqueQueries[index].name,
+            file: operation.filename,
+        })),
+    });
 
     // 7. Delete stale managed files ONLY AFTER manifest commit succeeds.
     const newManagedLower = new Set(newManagedFiles.map(f => f.toLowerCase()));
