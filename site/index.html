@@ -247,7 +247,7 @@
           <div
             class="mockup"
             role="img"
-            aria-label="A File SQL Query Editor window running SELECT region, SUM(revenue) AS total FROM sales, with a results grid showing the top four regions by revenue."
+            aria-label="A File SQL Query Editor window with CSV and Parquet export buttons, running SELECT region, SUM(revenue) AS total FROM sales, with a results grid showing the top four regions by revenue."
           >
             <div class="mockup-titlebar">
               <span class="lights" aria-hidden="true">
@@ -295,9 +295,14 @@
                 </svg>
                 Run
               </button>
-              <span class="tb-hint"
-                >Ctrl+Enter · select text to run partial query</span
-              >
+              <span class="tb-hint">Ctrl+Enter</span>
+              <span class="tb-separator"></span>
+              <button type="button" class="export-btn" tabindex="-1">
+                Export CSV
+              </button>
+              <button type="button" class="export-btn" tabindex="-1">
+                Export Parquet
+              </button>
               <span class="tb-meta">
                 <span>4 rows</span>
               </span>
@@ -883,7 +888,7 @@
               <div
                 class="ui-window ui-window--editor"
                 role="img"
-                aria-label="The File SQL Query Editor: a Tables sidebar showing the sales parquet schema, a SELECT * FROM sales query, and a results grid with seven sample sales rows."
+                aria-label="The File SQL Query Editor: a Tables sidebar with workspace import and save actions, CSV and Parquet export buttons, a SELECT * FROM sales query, and a results grid with seven sample sales rows."
               >
                 <div class="ui-titlebar">
                   <span class="lights" aria-hidden="true">
@@ -907,11 +912,27 @@
                     <div class="ui-panel-header">
                       <span>File SQL: Tables</span>
                       <span class="panel-actions">
-                        <span class="pa">⌘</span>
-                        <span class="pa">+</span>
-                        <span class="pa">▤</span>
-                        <span class="pa">▶</span>
-                        <span class="pa">↗</span>
+                        <span class="pa" title="Add Folder">
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h5l1.5 2h6.5v7h-13z" /></svg>
+                        </span>
+                        <span class="pa" title="Add Path">
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" /></svg>
+                        </span>
+                        <span class="pa" title="Clear Tables">
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M6 2h4M5 6v6M8 6v6M11 6v6M4 4l1 10h6l1-10" /></svg>
+                        </span>
+                        <span class="pa" title="Import Workspace Configuration">
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.5h12v8H9.5M5 13.5h6M8 10.5v3M2 8l2.5 2.5L7 8M4.5 4.5v6" /></svg>
+                        </span>
+                        <span class="pa" title="Open Query Editor">
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5z" /></svg>
+                        </span>
+                        <span class="pa" title="Save Workspace Configuration">
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2.5h9l2 2v9h-11zM5 2.5v4h6v-4M5 10h6v3.5H5z" /></svg>
+                        </span>
+                        <span class="pa" title="Collapse All">
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 5 4 4 4-4M4 9l4 4 4-4" /></svg>
+                        </span>
                       </span>
                     </div>
                     <div class="tbl-item">
@@ -999,9 +1020,14 @@
                         </svg>
                         Run
                       </button>
-                      <span class="tb-hint"
-                        >Ctrl+Enter · select text to run partial query</span
-                      >
+                      <span class="tb-hint">Ctrl+Enter</span>
+                      <span class="tb-separator"></span>
+                      <button type="button" class="export-btn" tabindex="-1">
+                        Export CSV
+                      </button>
+                      <button type="button" class="export-btn" tabindex="-1">
+                        Export Parquet
+                      </button>
                       <span class="tb-meta">
                         <span>1000 rows</span>
                         <span class="tb-warn">
