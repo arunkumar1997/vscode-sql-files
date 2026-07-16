@@ -539,15 +539,15 @@ export function App(): JSX.Element {
               </button>
             </div>
           ))}
+          <button
+            className="tab-add"
+            onClick={addTab}
+            aria-label="New query tab"
+            title="New query tab"
+          >
+            +
+          </button>
         </div>
-        <button
-          className="tab-add"
-          onClick={addTab}
-          aria-label="New query tab"
-          title="New query tab"
-        >
-          +
-        </button>
       </div>
 
       {/* ── Toolbar (run button + row count + export) ── */}
