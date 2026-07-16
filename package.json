@@ -235,6 +235,11 @@
           "type": "number",
           "default": 1000,
           "description": "Maximum number of rows returned per query"
+        },
+        "fileSql.autoLoadLocal": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically load local files and folders from workspace configuration while keeping S3 tables lazy"
         }
       }
     }

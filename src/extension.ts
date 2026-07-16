@@ -19,6 +19,7 @@ import { TableEntry } from "./types";
 import { initLogger, log } from "./logger";
 import {
   loadTable,
+  triggerAutoLoadLocal,
   importWorkspaceConfig,
   unloadTable,
   reloadTable,
@@ -183,6 +184,11 @@ export async function activate(
       }
       const imported = await importWorkspaceConfig(registry!, wsFolder.uri);
       if (imported) {
+        await triggerAutoLoadLocal(
+          registry!,
+          engine!,
+          wsFolder.uri.fsPath,
+        );
         // Item 5: Always reread queries from disk on import
         try {
           const queries = await readSavedQueries(wsFolder.uri);
@@ -282,6 +288,9 @@ export async function activate(
 
   if (hasWorkspaceQueries() && registry.getAll().length > 0) {
     openQueryEditor(context, registry, engine, false);
+  }
+  if (wsFolder) {
+    void triggerAutoLoadLocal(registry, engine, wsFolder.uri.fsPath);
   }
 
   // Expose test API only when running in the Extension Development Host

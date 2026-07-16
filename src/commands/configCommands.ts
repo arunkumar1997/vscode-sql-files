@@ -19,6 +19,9 @@ import {
 import { detectFileType } from "../fileScanner";
 import { log, logError } from "../logger";
 
+export const AUTO_LOAD_CONCURRENCY = 4;
+const autoLoadBatches = new WeakMap<TableRegistry, Promise<void>>();
+
 // --- Promise-locked idempotent engine initialization ---
 
 /**
@@ -168,6 +171,111 @@ export async function loadTable(
         }
         return false;
     }
+}
+
+export async function autoLoadConfiguredLocalTables(
+    registry: TableRegistry,
+    engine: DuckDBEngine,
+    workspaceRoot: string,
+    progress?: vscode.Progress<{ message?: string; increment?: number }>,
+    token?: vscode.CancellationToken,
+): Promise<void> {
+    const pendingNames = registry.getAll()
+        .filter((entry) =>
+            !entry.isS3 &&
+            (entry.loadState === "configured" || entry.loadState === "error"),
+        )
+        .map((entry) => entry.name);
+    if (pendingNames.length === 0 || token?.isCancellationRequested) {
+        return;
+    }
+
+    let nextIndex = 0;
+    let completed = 0;
+    async function worker(): Promise<void> {
+        while (!token?.isCancellationRequested) {
+            const index = nextIndex++;
+            if (index >= pendingNames.length) {
+                return;
+            }
+
+            const tableName = pendingNames[index];
+            const current = registry.get(tableName);
+            if (
+                current &&
+                !current.isS3 &&
+                (current.loadState === "configured" || current.loadState === "error")
+            ) {
+                await loadTable(
+                    tableName,
+                    registry,
+                    engine,
+                    workspaceRoot,
+                    progress,
+                    token,
+                );
+            }
+            completed++;
+            progress?.report({
+                message: `Loaded ${completed} of ${pendingNames.length} local tables`,
+                increment: 100 / pendingNames.length,
+            });
+        }
+    }
+
+    const workerCount = Math.min(AUTO_LOAD_CONCURRENCY, pendingNames.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+}
+
+export async function triggerAutoLoadLocal(
+    registry: TableRegistry,
+    engine: DuckDBEngine,
+    workspaceRoot: string,
+): Promise<boolean> {
+    const enabled = vscode.workspace
+        .getConfiguration("fileSql")
+        .get<boolean>("autoLoadLocal", true);
+    if (!enabled) {
+        return false;
+    }
+
+    const activeBatch = autoLoadBatches.get(registry);
+    if (activeBatch) {
+        await activeBatch;
+    }
+
+    const pendingCount = registry.getAll().filter((entry) =>
+        !entry.isS3 &&
+        (entry.loadState === "configured" || entry.loadState === "error"),
+    ).length;
+    if (pendingCount === 0) {
+        return false;
+    }
+
+    const batch = Promise.resolve(vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: `File SQL: Loading ${pendingCount} local table${pendingCount === 1 ? "" : "s"}`,
+            cancellable: true,
+        },
+        (progress, token) =>
+            autoLoadConfiguredLocalTables(
+                registry,
+                engine,
+                workspaceRoot,
+                progress,
+                token,
+            ),
+    ));
+    autoLoadBatches.set(registry, batch);
+    try {
+        await batch;
+    } finally {
+        if (autoLoadBatches.get(registry) === batch) {
+            autoLoadBatches.delete(registry);
+        }
+    }
+    return true;
 }
 
 async function loadLocalTable(
