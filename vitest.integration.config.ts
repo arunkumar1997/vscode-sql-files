@@ -6,6 +6,7 @@ export default defineConfig({
     include: ["test/integration/**/*.test.ts"],
     environment: "node",
     testTimeout: 30000,
+    hookTimeout: 30000,
     pool: "forks",
     coverage: {
       provider: "v8",

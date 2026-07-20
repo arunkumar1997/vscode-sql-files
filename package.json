@@ -240,6 +240,21 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically load local files and folders from workspace configuration while keeping S3 tables lazy"
+        },
+        "fileSql.s3ReadMode": {
+          "type": "string",
+          "default": "ask",
+          "enum": [
+            "ask",
+            "download",
+            "range"
+          ],
+          "enumDescriptions": [
+            "Prompt each time whether to use direct range reads or download first (Parquet only)",
+            "Always download the full file to local temp before querying",
+            "Use DuckDB httpfs range reads directly from S3 (Parquet only, requires network per query)"
+          ],
+          "description": "How S3 Parquet files are accessed. Range mode avoids downloading the full file but generates multiple S3 GET requests per query."
         }
       }
     }
@@ -254,6 +269,7 @@
     "package:target": "node scripts/package.mjs --target",
     "test:unit": "vitest run test/unit",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:live:s3-range": "vitest run --config vitest.live.config.ts",
     "pretest:e2e": "npm run build && tsc -p ./test/e2e/tsconfig.json",
     "test:e2e": "node ./out-e2e/test/e2e/runTests.js",
     "test": "npm run test:unit && npm run test:integration && npm run test:e2e",

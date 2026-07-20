@@ -12,10 +12,13 @@ import {
     downloadS3File,
     getConfig,
     groupS3KeysByFileType,
+    isRangeReadEligible,
+    isSingleKeyRangeEligible,
     listS3Keys,
     parseS3Uri,
     resolveAwsCredentials,
 } from "../s3Handler";
+import { resolveS3ReadMode, registerWithRangeRead } from "../s3RangeRead";
 import { detectFileType } from "../fileScanner";
 import { log, logError } from "../logger";
 
@@ -421,6 +424,36 @@ async function loadS3Folder(
         );
     }
 
+    // Check range-read eligibility for Parquet folders
+    if (configuredType === "parquet" && isRangeReadEligible(matchingKeys)) {
+        const readMode = await resolveS3ReadMode(matchingKeys);
+        if (readMode === undefined) {
+            throw new CancellationError();
+        }
+        if (readMode === "range") {
+            // Range-read: no temp dir needed
+            cleanupPerLoadTempDir(loadTempDir);
+            const result = await registerWithRangeRead(
+                entry, parsed.bucket, parsed.prefix, matchingKeys, creds, region, engine, registry, progress,
+            );
+            if (result === "registered") {
+                registry.setLoadState(entry.name, "loaded");
+                log(`Table "${entry.name}" loaded from S3 folder via range-read`);
+                return;
+            } else if (result === "cancelled") {
+                throw new CancellationError();
+            }
+            // "fallback" — continue with download below, need a new temp dir
+            const newLoadTempDir = createPerLoadTempDir();
+            // Re-run download path with the new temp dir
+            await downloadFolderKeys(
+                entry, parsed, matchingKeys, creds, region, newLoadTempDir, engine, registry, runtimeId, progress, token, abortSignal,
+            );
+            (entry as TableEntry & { _tempDir?: string })._tempDir = newLoadTempDir;
+            return;
+        }
+    }
+
     // If hivePartitioning is configured, validate that directory structure is hive-style
     const useHive = entry.hivePartitioning ?? false;
     if (useHive) {
@@ -471,6 +504,7 @@ async function loadS3Folder(
     if (useHive) {
         entry.hivePartitioning = true;
     }
+    entry.readMode = "download";
 
     // registerTable is failure-atomic internally (rolls back view on introspect failure)
     const cols = await engine.registerTable(entry);
@@ -491,6 +525,71 @@ async function loadS3Folder(
     log(`Table "${entry.name}" loaded from S3 folder`);
 }
 
+/**
+ * Download folder keys and register — extracted to support fallback from range-read.
+ */
+async function downloadFolderKeys(
+    entry: TableEntry,
+    parsed: { bucket: string; prefix: string },
+    matchingKeys: string[],
+    creds: { keyId: string; secret: string; token?: string },
+    region: string,
+    loadTempDir: string,
+    engine: DuckDBEngine,
+    registry: TableRegistry,
+    runtimeId: string | undefined,
+    progress?: vscode.Progress<{ message?: string }>,
+    token?: vscode.CancellationToken,
+    abortSignal?: AbortSignal,
+): Promise<void> {
+    const useHive = entry.hivePartitioning ?? false;
+    const ext = path.extname(matchingKeys[0]);
+
+    for (const key of matchingKeys) {
+        checkCancellation(token);
+        const relativePath = key.slice(parsed.prefix.length);
+        const parts = relativePath.split("/");
+        if (parts.some((p) => p === ".." || p === "")) {
+            throw new Error(`S3 key "${key}" contains invalid path segments (traversal rejected)`);
+        }
+        const destPath = path.join(loadTempDir, relativePath);
+        const resolvedDest = path.resolve(destPath);
+        const resolvedBase = path.resolve(loadTempDir);
+        if (!resolvedDest.startsWith(resolvedBase + path.sep)) {
+            throw new Error(`S3 key "${key}" resolves outside temp directory (path traversal rejected)`);
+        }
+        fs.mkdirSync(path.dirname(destPath), { recursive: true });
+        progress?.report({ message: `Downloading ${path.basename(key)}…` });
+        await downloadS3File(parsed.bucket, key, destPath, creds, region, abortSignal);
+    }
+
+    checkCancellation(token);
+    if (isEntryStale(entry.name, runtimeId, registry)) {
+        throw new StaleEntryError(entry.name);
+    }
+
+    const globPath = path.join(loadTempDir, "**", `*${ext}`);
+    entry.filePath = globPath;
+    if (useHive) {
+        entry.hivePartitioning = true;
+    }
+    entry.readMode = "download";
+
+    const cols = await engine.registerTable(entry);
+    if (token?.isCancellationRequested) {
+        try { await engine.dropTable(entry.name); } catch { /* best-effort */ }
+        throw new CancellationError();
+    }
+    if (isEntryStale(entry.name, runtimeId, registry)) {
+        try { await engine.dropTable(entry.name); } catch { /* best-effort */ }
+        throw new StaleEntryError(entry.name);
+    }
+
+    entry.columns = cols;
+    registry.setLoadState(entry.name, "loaded");
+    log(`Table "${entry.name}" loaded from S3 folder (download fallback)`);
+}
+
 async function loadS3SingleFile(
     entry: TableEntry,
     parsed: { bucket: string; prefix: string },
@@ -504,6 +603,60 @@ async function loadS3SingleFile(
     token?: vscode.CancellationToken,
     abortSignal?: AbortSignal,
 ): Promise<void> {
+    // Check range-read eligibility for Parquet files
+    if (isSingleKeyRangeEligible(parsed.prefix) && entry.fileType === "parquet") {
+        const readMode = await resolveS3ReadMode([parsed.prefix]);
+        if (readMode === undefined) {
+            throw new CancellationError();
+        }
+        if (readMode === "range") {
+            // Range-read path — no temp dir needed
+            cleanupPerLoadTempDir(loadTempDir);
+            const result = await registerWithRangeRead(
+                entry, parsed.bucket, parsed.prefix, [parsed.prefix], creds, region, engine, registry, progress,
+            );
+            if (result === "registered") {
+                registry.setLoadState(entry.name, "loaded");
+                return;
+            } else if (result === "cancelled") {
+                throw new CancellationError();
+            }
+            // "fallback" — continue with download below, re-create temp dir
+            // We need the loadTempDir back since we cleaned it up
+            const newTempDir = createPerLoadTempDir();
+            // Replace the reference for the caller (they already captured it)
+            // Fall through to download path with new temp dir
+            const filename = path.basename(parsed.prefix);
+            const localPath = path.join(newTempDir, filename);
+            progress?.report({ message: `Downloading ${entry.name}…` });
+            await downloadS3File(parsed.bucket, parsed.prefix, localPath, creds, region, abortSignal);
+            checkCancellation(token);
+            if (isEntryStale(entry.name, runtimeId, registry)) {
+                cleanupPerLoadTempDir(newTempDir);
+                throw new StaleEntryError(entry.name);
+            }
+            entry.filePath = localPath;
+            entry.readMode = "download";
+            const cols = await engine.registerTable(entry);
+            if (token?.isCancellationRequested) {
+                try { await engine.dropTable(entry.name); } catch { /* best-effort */ }
+                cleanupPerLoadTempDir(newTempDir);
+                throw new CancellationError();
+            }
+            if (isEntryStale(entry.name, runtimeId, registry)) {
+                try { await engine.dropTable(entry.name); } catch { /* best-effort */ }
+                cleanupPerLoadTempDir(newTempDir);
+                throw new StaleEntryError(entry.name);
+            }
+            entry.columns = cols;
+            (entry as TableEntry & { _tempDir?: string })._tempDir = newTempDir;
+            registry.setLoadState(entry.name, "loaded");
+            log(`Table "${entry.name}" loaded from S3 single file (download fallback)`);
+            return;
+        }
+    }
+
+    // Download path (original behavior)
     const filename = path.basename(parsed.prefix);
     const localPath = path.join(loadTempDir, filename);
 
@@ -516,6 +669,7 @@ async function loadS3SingleFile(
     }
 
     entry.filePath = localPath;
+    entry.readMode = "download";
 
     // registerTable is failure-atomic internally
     const cols = await engine.registerTable(entry);
@@ -623,8 +777,14 @@ export async function unloadTable(
         delete (entry as TableEntry & { _tempDir?: string })._tempDir;
     }
 
+    // Clean up scoped S3 secret (if range-read was used)
+    if (entry.readMode === "range" && engine.isReady()) {
+        await engine.dropS3Secret(tableName);
+    }
+
     // Clear runtime data
     entry.columns = undefined;
+    entry.readMode = undefined;
     // For S3 entries, filePath is a temp path — clear it back to source
     if (entry.isS3 && entry.source) {
         entry.filePath = entry.source;
