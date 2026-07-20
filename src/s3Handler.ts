@@ -476,11 +476,47 @@ export function getConfig(): {
   profile: string;
   region: string;
   maxRows: number;
+  s3ReadMode: import("./types").S3ReadModeSetting;
 } {
   const cfg = vscode.workspace.getConfiguration("fileSql");
   return {
     profile: cfg.get<string>("awsProfile", "default"),
     region: cfg.get<string>("awsRegion", "us-east-1"),
     maxRows: cfg.get<number>("maxResultRows", 1000),
+    s3ReadMode: cfg.get<import("./types").S3ReadModeSetting>("s3ReadMode", "ask"),
   };
+}
+
+/**
+ * Check if a set of S3 keys is eligible for range-read mode.
+ * Unsupported marker objects are ignored. Eligible only when every supported
+ * data object is Parquet and at least one Parquet object exists.
+ */
+export function isRangeReadEligible(keys: string[]): boolean {
+  const supportedKeys = keys.filter((key) => detectFileType(key) !== null);
+  return supportedKeys.length > 0
+    && supportedKeys.every((key) => isSingleKeyRangeEligible(key));
+}
+
+/**
+ * Return the Parquet data objects to register for an eligible folder.
+ */
+export function rangeReadKeys(keys: string[]): string[] {
+  return isRangeReadEligible(keys)
+    ? keys.filter((key) => isSingleKeyRangeEligible(key))
+    : [];
+}
+
+/**
+ * Check if a single S3 key is eligible for range-read mode.
+ */
+export function isSingleKeyRangeEligible(key: string): boolean {
+  return key.toLowerCase().endsWith(".parquet");
+}
+
+/**
+ * Build full s3:// URIs from a bucket and key list.
+ */
+export function buildS3Uris(bucket: string, keys: string[]): string[] {
+  return keys.map((k) => `s3://${bucket}/${k}`);
 }

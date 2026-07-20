@@ -20,10 +20,18 @@ vi.mock("../../src/s3Handler", () => ({
     detectBucketRegion: vi.fn().mockResolvedValue("us-east-1"),
     listS3Keys: vi.fn().mockResolvedValue([]),
     downloadS3File: vi.fn().mockResolvedValue(undefined),
-    getConfig: vi.fn().mockReturnValue({ profile: "default", region: "us-east-1", maxRows: 1000 }),
+    getConfig: vi.fn().mockReturnValue({ profile: "default", region: "us-east-1", maxRows: 1000, s3ReadMode: "download" }),
     groupS3KeysByFileType: vi.fn().mockReturnValue([]),
     createPerLoadTempDir: vi.fn().mockReturnValue("/tmp/test-perload"),
     cleanupPerLoadTempDir: vi.fn(),
+    isRangeReadEligible: vi.fn().mockReturnValue(false),
+    isSingleKeyRangeEligible: vi.fn().mockReturnValue(false),
+}));
+
+// Mock s3RangeRead to avoid prompts in tests — always return "download"
+vi.mock("../../src/s3RangeRead", () => ({
+    resolveS3ReadMode: vi.fn().mockResolvedValue("download"),
+    registerWithRangeRead: vi.fn().mockResolvedValue("fallback"),
 }));
 
 // Mock configManager

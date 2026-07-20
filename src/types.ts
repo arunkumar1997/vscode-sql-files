@@ -2,6 +2,12 @@ export type FileType = "csv" | "json" | "parquet" | "text";
 
 export type ExportFormat = "csv" | "parquet";
 
+/** How S3 Parquet files are accessed at query time. */
+export type S3ReadMode = "download" | "range";
+
+/** User-facing setting value for fileSql.s3ReadMode. */
+export type S3ReadModeSetting = "ask" | "download" | "range";
+
 /** Lifecycle state of a table in the registry. */
 export type TableLoadState = "configured" | "loading" | "loaded" | "error";
 
@@ -25,6 +31,8 @@ export interface TableEntry {
   origin?: TableOrigin;
   /** Declarative source from config file — preserved separately from runtime filePath. */
   source?: string;
+  /** Effective S3 read mode at runtime: "download" (local temp) or "range" (httpfs direct). */
+  readMode?: S3ReadMode;
 }
 
 /**

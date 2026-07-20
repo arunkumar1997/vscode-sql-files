@@ -99,6 +99,79 @@ This works at any depth — only the **last subfolder** name is used as the tabl
 - **Hive-style partitioned datasets** — folders with `key=value` subdirectories are registered as one table and read with DuckDB Hive partitioning support, preserving the partition layout for local folders and S3 downloads
 - Temp files are cleaned up automatically when the extension deactivates
 
+### ⚡ S3 Parquet Range Reads (New)
+
+For **Parquet files only**, File SQL can query S3 objects directly using DuckDB's `httpfs` extension — reading only the byte ranges needed for each query instead of downloading the full file.
+
+| Mode | Behavior |
+| --- | --- |
+| **Download** (default fallback) | Full file downloaded to temp, then queried locally. Works for all formats. |
+| **Range** | DuckDB reads Parquet metadata + only relevant column chunks via HTTP range GETs. No local copy. Parquet only. |
+
+**Setting: `fileSql.s3ReadMode`** — controls how eligible S3 Parquet files are accessed:
+
+| Value | Effect |
+| --- | --- |
+| `ask` (default) | Prompts each time: *Query with range reads*, *Download first*, or *Cancel* |
+| `download` | Always download the full file (original behavior) |
+| `range` | Always use direct range reads (Parquet only; non-Parquet falls back to download) |
+
+**Eligibility:** Range mode is only available when:
+- Source is an `s3://` URI
+- File type is **Parquet** (`.parquet` extension, case-insensitive)
+- For folders/listings: ALL objects must be `.parquet` (mixed formats remain download-only)
+
+**How it works:**
+1. AWS credentials are resolved via the configured profile (same as download mode)
+2. A temporary, scoped DuckDB secret is created per table with `SCOPE` narrowed to the exact S3 prefix
+3. A `CREATE VIEW` is registered pointing to `read_parquet('s3://...')` — DuckDB's httpfs performs range GETs at query time
+4. Projection and filter pushdown means only relevant Parquet row groups and columns are fetched
+
+**Important considerations:**
+- **Network per query:** Every query against a range-read table makes S3 GET requests. If you run many queries, accumulated transfer may exceed a single download
+- **S3 costs:** Each range GET is a billable S3 GET request. A single query may generate multiple GETs (metadata + column chunks)
+- **LIST requests:** The initial import still uses LIST to discover objects (same as download mode)
+- **No local disk usage:** Range-read tables do not write to temp directories
+- **Selective queries save bandwidth:** `SELECT col1 FROM big_table WHERE id = 42` reads far less data than a full scan
+- **Credential expiry:** If temporary AWS credentials expire, queries will fail. Use **Reload Table** to refresh credentials
+- **IAM requirements:** Same as download mode — `s3:GetObject` on the target objects, `s3:ListBucket` for folder imports, `s3:GetBucketLocation` for region detection
+- **Fallback:** If range-read validation fails, you are offered *Download instead* with the error shown. No silent download of large datasets
+
+**Benchmark template:** To compare download vs range-read performance for your dataset:
+```
+1. Load the same S3 Parquet table twice — once with "download", once with "range"
+2. Measure: first-query latency, repeated-query latency, temp disk usage
+3. For range mode: check CloudWatch S3 metrics for GET count and BytesDownloaded
+4. Compare selective query (WHERE + specific columns) vs full scan (SELECT *)
+5. Expected: range wins for selective queries on large files; download wins for repeated full scans
+```
+
+**Live range verification:** The opt-in live test uses the configured AWS profile,
+queries one real S3 Parquet object, and verifies that DuckDB sends `Range` headers,
+S3 returns `206 Partial Content`, and the measured partial responses are smaller than
+the complete object. It is excluded from normal unit and integration test runs.
+
+```bash
+FILE_SQL_LIVE_S3_URI=s3://your-bucket/path/large-file.parquet \
+FILE_SQL_LIVE_AWS_PROFILE=default \
+npm run test:live:s3-range
+```
+
+Larger objects provide a more representative bandwidth comparison. To exercise
+projection and filter pushdown with columns from your dataset, provide a query
+containing the required `{{table}}` placeholder:
+
+```bash
+FILE_SQL_LIVE_S3_URI=s3://your-bucket/path/large-file.parquet \
+FILE_SQL_LIVE_AWS_PROFILE=default \
+FILE_SQL_LIVE_S3_QUERY='SELECT customer_id FROM {{table}} WHERE event_date = DATE '\''2026-01-01'\''' \
+npm run test:live:s3-range
+```
+
+The test prints only object size, request counts, and measured response bytes. It
+does not print HTTP authorization headers or resolved AWS credentials. The profile
+needs `s3:GetObject` and `s3:GetBucketLocation` for a single-object test.
+
 ---
 
 ## 📦 Supported File Formats

@@ -12,10 +12,13 @@ import {
   getConfig,
   groupKeysByLeafPrefix,
   groupS3KeysByFileType,
+  isSingleKeyRangeEligible,
   listS3Keys,
   parseS3Uri,
+  rangeReadKeys,
   resolveAwsCredentials,
 } from "../s3Handler";
+import { resolveS3ReadMode, registerWithRangeRead } from "../s3RangeRead";
 import { TableRegistry } from "../tableRegistry";
 import { TableEntry } from "../types";
 import { log, logError } from "../logger";
@@ -196,6 +199,24 @@ async function handleS3Path(
             );
             return;
           }
+
+          // Check range-read eligibility for the whole folder
+          const parquetKeys = rangeReadKeys(keys);
+          const allParquet = parquetKeys.length > 0;
+          const readMode = await resolveS3ReadMode(keys);
+          if (readMode === undefined) {
+            return; // User cancelled
+          }
+
+          if (readMode === "range" && allParquet) {
+            // Range-read path for all-Parquet folder
+            await handleS3FolderRangeRead(
+              parsed, parquetKeys, creds, region, registry, engine, progress,
+            );
+            return;
+          }
+
+          // Download path (original behavior)
           entries = [];
           const hivePrefixes = findHivePartitionPrefixes(keys, parsed.prefix);
           const hiveKeys = new Set<string>();
@@ -241,7 +262,21 @@ async function handleS3Path(
           }
           makeEntryNamesUnique(entries);
         } else {
-          // Single file — key is the prefix without trailing slash
+          // Single file
+          const key = parsed.prefix;
+          const readMode = await resolveS3ReadMode([key]);
+          if (readMode === undefined) {
+            return; // User cancelled
+          }
+
+          if (readMode === "range" && isSingleKeyRangeEligible(key)) {
+            await handleS3SingleFileRangeRead(
+              parsed, key, creds, region, registry, engine, progress,
+            );
+            return;
+          }
+
+          // Download path
           entries = await downloadS3Entries(
             parsed.bucket,
             [parsed.prefix],
@@ -274,6 +309,179 @@ async function handleS3Path(
       }
     },
   );
+}
+
+/**
+ * Handle range-read registration for a single S3 Parquet file.
+ */
+async function handleS3SingleFileRangeRead(
+  parsed: { bucket: string; prefix: string },
+  key: string,
+  creds: { keyId: string; secret: string; token?: string },
+  region: string,
+  registry: TableRegistry,
+  engine: DuckDBEngine,
+  progress: vscode.Progress<{ message?: string }>,
+): Promise<void> {
+  const { deriveTableName } = await import("../fileScanner");
+  const tableName = deriveTableName(key);
+  const entry: TableEntry = {
+    name: tableName,
+    filePath: `s3://${parsed.bucket}/${key}`,
+    sourceUri: `s3://${parsed.bucket}/${key}`,
+    fileType: "parquet",
+    isS3: true,
+  };
+
+  try {
+    await engine.ensureInitialized();
+  } catch (err: unknown) {
+    vscode.window.showErrorMessage(
+      `File SQL: DuckDB failed to initialize — ${(err as Error).message}`,
+    );
+    return;
+  }
+
+  const result = await registerWithRangeRead(
+    entry, parsed.bucket, key, [key], creds, region, engine, registry, progress,
+  );
+
+  if (result === "registered") {
+    registry.add(entry);
+    vscode.window.showInformationMessage(
+      `File SQL: Loaded "${tableName}" via range-read from S3.`,
+    );
+    if (!isQueryEditorOpen()) {
+      vscode.commands.executeCommand("fileSql.openQueryEditor");
+    }
+  } else if (result === "fallback") {
+    // Fallback to download
+    const entries = await downloadS3Entries(
+      parsed.bucket, [key], creds, region, progress,
+    );
+    if (entries.length > 0) {
+      await registerEntries(entries, registry, engine, progress);
+      vscode.window.showInformationMessage(
+        `File SQL: Loaded "${entries[0].name}" (downloaded from S3).`,
+      );
+      if (!isQueryEditorOpen()) {
+        vscode.commands.executeCommand("fileSql.openQueryEditor");
+      }
+    }
+  }
+  // "cancelled" — do nothing
+}
+
+/**
+ * Handle range-read registration for an all-Parquet S3 folder.
+ */
+async function handleS3FolderRangeRead(
+  parsed: { bucket: string; prefix: string },
+  keys: string[],
+  creds: { keyId: string; secret: string; token?: string },
+  region: string,
+  registry: TableRegistry,
+  engine: DuckDBEngine,
+  progress: vscode.Progress<{ message?: string }>,
+): Promise<void> {
+  const { deriveTableName } = await import("../fileScanner");
+
+  try {
+    await engine.ensureInitialized();
+  } catch (err: unknown) {
+    vscode.window.showErrorMessage(
+      `File SQL: DuckDB failed to initialize — ${(err as Error).message}`,
+    );
+    return;
+  }
+
+  // Check for Hive partitioning
+  const hivePrefixes = findHivePartitionPrefixes(keys, parsed.prefix);
+  const hiveKeys = new Set<string>();
+  for (const hp of hivePrefixes) {
+    keys.filter((k) => k.startsWith(hp)).forEach((k) => hiveKeys.add(k));
+  }
+
+  const registeredEntries: TableEntry[] = [];
+
+  // Register Hive-partitioned groups via range-read
+  for (const hivePrefix of hivePrefixes) {
+    const partitionKeys = keys.filter((k) => k.startsWith(hivePrefix));
+    const folderSegment = hivePrefix.replace(/\/$/, "").split("/").pop() ?? "table";
+    const tableName = deriveTableName(folderSegment);
+    const entry: TableEntry = {
+      name: tableName,
+      filePath: `s3://${parsed.bucket}/${hivePrefix}`,
+      sourceUri: `s3://${parsed.bucket}/${hivePrefix}`,
+      fileType: "parquet",
+      isS3: true,
+      hivePartitioning: true,
+    };
+
+    const result = await registerWithRangeRead(
+      entry, parsed.bucket, hivePrefix, partitionKeys, creds, region, engine, registry, progress,
+    );
+
+    if (result === "registered") {
+      registry.add(entry);
+      registeredEntries.push(entry);
+    } else if (result === "fallback") {
+      // Download fallback for this group
+      const downloaded = await downloadS3HiveFolder(
+        parsed.bucket, hivePrefix, partitionKeys, creds, region, progress, "parquet", ".parquet", false,
+      );
+      if (downloaded) {
+        await registerEntries([downloaded], registry, engine, progress);
+        registeredEntries.push(downloaded);
+      }
+    }
+  }
+
+  // Non-Hive leaf groups
+  const nonHiveKeys = keys.filter((k) => !hiveKeys.has(k));
+  const leafGroups = groupKeysByLeafPrefix(nonHiveKeys);
+  for (const [leafPrefix, leafKeys] of leafGroups) {
+    const folderSegment = leafPrefix.replace(/\/$/, "").split("/").pop() ?? "table";
+    const tableName = deriveTableName(folderSegment);
+    const entry: TableEntry = {
+      name: tableName,
+      filePath: `s3://${parsed.bucket}/${leafPrefix}`,
+      sourceUri: `s3://${parsed.bucket}/${leafPrefix}`,
+      fileType: "parquet",
+      isS3: true,
+    };
+
+    const result = await registerWithRangeRead(
+      entry, parsed.bucket, leafPrefix, leafKeys, creds, region, engine, registry, progress,
+    );
+
+    if (result === "registered") {
+      registry.add(entry);
+      registeredEntries.push(entry);
+    } else if (result === "fallback") {
+      const downloaded = await downloadS3Folder(
+        parsed.bucket, leafPrefix, leafKeys, creds, region, progress,
+      );
+      if (downloaded) {
+        await registerEntries([downloaded], registry, engine, progress);
+        registeredEntries.push(downloaded);
+      }
+    }
+  }
+
+  if (registeredEntries.length > 0) {
+    makeEntryNamesUnique(registeredEntries);
+    vscode.window.showInformationMessage(
+      `File SQL: Loaded ${registeredEntries.length} table(s) from S3 (${parsed.bucket}).`,
+    );
+    if (!isQueryEditorOpen()) {
+      vscode.commands.executeCommand("fileSql.openQueryEditor");
+    }
+  } else {
+    vscode.window.showWarningMessage(
+      "No tables loaded from S3 — all cancelled or failed.",
+    );
+  }
 }
 
 function makeEntryNamesUnique(entries: TableEntry[]): void {

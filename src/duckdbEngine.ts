@@ -1,6 +1,7 @@
 import { DuckDBInstance, DuckDBConnection, StatementType } from "@duckdb/node-api";
 import { ColumnInfo, ExportFormat, FileType, QueryResult, TableEntry } from "./types";
 import { log, logError } from "./logger";
+import * as crypto from "crypto";
 
 /**
  * Escape a string for use inside a SQL single-quoted literal.
@@ -48,6 +49,10 @@ export class DuckDBEngine {
   private ready = false;
   private initPromise: Promise<void> | undefined;
 
+  private httpfsLoaded = false;
+  /** Active scoped S3 secret names (for cleanup on dispose/unload). */
+  private activeSecrets = new Map<string, string>();
+
   async init(): Promise<void> {
     this.instance = await DuckDBInstance.create(":memory:");
     this.conn = await this.instance.connect();
@@ -78,14 +83,130 @@ export class DuckDBEngine {
     token: string | undefined,
     region: string,
   ): Promise<void> {
-    await this.exec(`INSTALL httpfs`);
-    await this.exec(`LOAD httpfs`);
+    await this.ensureHttpfs();
     await this.exec(`SET s3_region='${escapeSqlString(region)}'`);
     await this.exec(`SET s3_access_key_id='${escapeSqlString(keyId)}'`);
     await this.exec(`SET s3_secret_access_key='${escapeSqlString(secret)}'`);
     if (token) {
       await this.exec(`SET s3_session_token='${escapeSqlString(token)}'`);
     }
+  }
+
+  /**
+   * Load httpfs extension idempotently.
+   */
+  async ensureHttpfs(): Promise<void> {
+    if (this.httpfsLoaded) return;
+    await this.exec(`INSTALL httpfs`);
+    await this.exec(`LOAD httpfs`);
+    this.httpfsLoaded = true;
+  }
+
+  /**
+   * Create a temporary scoped S3 secret for range-read mode.
+   * Returns the secret name for later cleanup.
+   * Uses CREATE OR REPLACE SECRET ... (TYPE S3, PROVIDER config, SCOPE ...).
+   * Never logs credential SQL.
+   */
+  async createScopedS3Secret(
+    tableName: string,
+    bucket: string,
+    prefix: string,
+    credentials: { keyId: string; secret: string; token?: string },
+    region: string,
+  ): Promise<string> {
+    await this.ensureHttpfs();
+    // Generate unique secret name from table + random suffix
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const secretName = `filesql_${tableName.replace(/[^a-zA-Z0-9_]/g, "_")}_${suffix}`;
+    const scope = `s3://${bucket}/${prefix}`;
+
+    const tokenClause = credentials.token
+      ? `\n  SESSION_TOKEN '${escapeSqlString(credentials.token)}',`
+      : "";
+    const urlStyleClause = bucket.includes(".")
+      ? "\n  URL_STYLE 'path',"
+      : "";
+    const sql = `CREATE OR REPLACE TEMPORARY SECRET "${escapeSqlString(secretName)}" (
+  TYPE s3,
+  PROVIDER config,
+  KEY_ID '${escapeSqlString(credentials.keyId)}',
+  SECRET '${escapeSqlString(credentials.secret)}',${tokenClause}
+  ${urlStyleClause}
+  REGION '${escapeSqlString(region)}',
+  SCOPE '${escapeSqlString(scope)}'
+)`;
+
+    // Execute but do NOT log the SQL (contains credentials)
+    try {
+      await this.conn.run(sql);
+    } catch (err) {
+      logError(`Failed to create S3 secret for table "${tableName}"`, err as Error);
+      throw err;
+    }
+
+    this.activeSecrets.set(tableName, secretName);
+    log(`Created scoped S3 secret for table "${tableName}" (scope: s3://${bucket}/${prefix.substring(0, 20)}...)`);
+    return secretName;
+  }
+
+  /**
+   * Drop a scoped S3 secret by table name (best-effort).
+   */
+  async dropS3Secret(tableName: string): Promise<void> {
+    const secretName = this.activeSecrets.get(tableName);
+    if (!secretName) return;
+    try {
+      await this.exec(`DROP SECRET IF EXISTS "${escapeSqlString(secretName)}"`);
+    } catch {
+      // Best-effort — secret may already be gone
+    }
+    this.activeSecrets.delete(tableName);
+  }
+
+  /**
+   * Register a table as a DuckDB VIEW using range-read (direct S3 read_parquet).
+   * The view reads from S3 URI(s) directly — no local download needed.
+   * Failure-atomic: drops the view if introspection fails.
+   */
+  async registerRangeTable(
+    entry: TableEntry,
+    s3Uris: string[],
+    hivePartitioning: boolean,
+  ): Promise<ColumnInfo[]> {
+    const ident = escapeDuckDBIdentifier(entry.name);
+    let readExpr: string;
+    if (s3Uris.length === 1) {
+      const escapedUri = escapeSqlString(s3Uris[0]);
+      readExpr = hivePartitioning
+        ? `read_parquet('${escapedUri}', hive_partitioning=true)`
+        : `read_parquet('${escapedUri}')`;
+    } else {
+      const uriList = s3Uris.map((u) => `'${escapeSqlString(u)}'`).join(", ");
+      readExpr = hivePartitioning
+        ? `read_parquet([${uriList}], hive_partitioning=true)`
+        : `read_parquet([${uriList}])`;
+    }
+    const viewSql = `CREATE OR REPLACE VIEW ${ident} AS SELECT * FROM ${readExpr}`;
+    log(`Registering range-read table "${entry.name}" (${s3Uris.length} URI(s))`);
+    await this.exec(viewSql);
+    try {
+      return await this.introspectColumns(entry.name);
+    } catch (err) {
+      try {
+        await this.exec(`DROP VIEW IF EXISTS ${ident}`);
+      } catch { /* best-effort rollback */ }
+      throw err;
+    }
+  }
+
+  /**
+   * Validate that a range-read view is functional by selecting 0 rows.
+   * Throws on failure with the actual DuckDB/httpfs error.
+   */
+  async validateRangeRead(tableName: string): Promise<void> {
+    const ident = escapeDuckDBIdentifier(tableName);
+    await this.conn.runAndReadAll(`SELECT 1 FROM ${ident} LIMIT 0`);
   }
 
   /**
@@ -319,6 +440,13 @@ export class DuckDBEngine {
   }
 
   dispose(): void {
+    // Best-effort cleanup of active S3 secrets
+    for (const secretName of this.activeSecrets.values()) {
+      try {
+        this.conn?.run(`DROP SECRET IF EXISTS "${escapeSqlString(secretName)}"`);
+      } catch { /* best-effort */ }
+    }
+    this.activeSecrets.clear();
     try {
       this.conn?.closeSync();
     } catch {
